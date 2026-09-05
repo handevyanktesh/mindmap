@@ -16,6 +16,8 @@ def test_db():
     
     # Ensure indexes
     db.users.create_index("email", unique=True)
+    db.classrooms.create_index("join_code", unique=True)
+    db.classrooms.create_index("teacher_id")
     
     yield db
     

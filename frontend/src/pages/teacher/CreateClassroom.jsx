@@ -11,17 +11,40 @@ export default function CreateClassroom() {
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!name || !subject) {
-      setError('Classroom Name and Subject are required.')
+    if (!name) {
+      setError('Classroom Name is required.')
       return
     }
 
     setError('')
-    // Simulate successful creation and redirect back to dashboard
-    // In future versions this will connect to the FastAPI backend API
-    navigate('/teacher')
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8000/api/classrooms/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          name, 
+          description: subject ? `${subject}\n\n${description}` : description
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        setError(errData.detail || 'Failed to create classroom');
+        return;
+      }
+
+      const newClassroom = await response.json();
+      navigate('/teacher');
+    } catch (err) {
+      console.error(err);
+      setError('Network error occurred');
+    }
   }
 
   return (

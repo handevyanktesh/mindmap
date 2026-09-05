@@ -1,13 +1,48 @@
-import React from 'react'
-import { useParams, Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
 
 export default function TeacherClassroom() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  
+  const [classroom, setClassroom] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const courseTitle = id === 'math-101' ? 'Calculus I (CAL-101)' : `Classroom session: ${id?.toUpperCase()}`
+  useEffect(() => {
+    const fetchClassroom = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const response = await fetch(`http://localhost:8000/api/classrooms/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        
+        if (response.status === 401 || response.status === 403) {
+          navigate('/teacher')
+          return
+        }
+        
+        if (!response.ok) {
+          throw new Error('Failed to load classroom details')
+        }
+        
+        const data = await response.json()
+        setClassroom(data)
+      } catch (err) {
+        console.error(err)
+        setError('Could not load classroom.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchClassroom()
+  }, [id, navigate])
+
+  const courseTitle = classroom ? classroom.name : `Classroom session: ${id?.toUpperCase()}`
 
   // Mock student tracking roster
   const studentRoster = [
@@ -24,23 +59,31 @@ export default function TeacherClassroom() {
     { type: 'danger', message: 'Student "Diana Prince" camera feed inactive', time: '5 mins ago' }
   ]
 
+  if (loading) {
+    return <PageContainer size="large" className="py-6"><p className="text-text-muted">Loading...</p></PageContainer>
+  }
+
+  if (error) {
+    return <PageContainer size="large" className="py-6"><p className="text-danger-600">{error}</p></PageContainer>
+  }
+
   return (
     <PageContainer size="large" className="py-6 space-y-6">
       
       {/* Session header banner */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <StatusBadge status="success" label="Active Live Feed" />
+          {classroom?.is_active ? <StatusBadge status="success" label="Active Live Feed" /> : <StatusBadge status="info" label="Inactive" />}
           <div>
             <h2 className="font-bold text-brand-navy text-base">
               {courseTitle} 
               <span className="text-[10px] font-normal text-warning-600 bg-warning-50 px-2 py-0.5 rounded ml-2 align-middle">Demo Data</span>
             </h2>
-            <p className="text-[10px] text-text-muted">Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{id}</code> &bull; Broadcast started: 10:00 AM</p>
+            <p className="text-[10px] text-text-muted">Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{classroom?.join_code}</code></p>
           </div>
         </div>
         <Link to="/teacher">
-          <Button variant="secondary" className="text-xs py-1.5 px-3">End Session</Button>
+          <Button variant="secondary" className="text-xs py-1.5 px-3">Dashboard</Button>
         </Link>
       </div>
 

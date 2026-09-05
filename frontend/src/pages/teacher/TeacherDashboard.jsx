@@ -1,16 +1,38 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
 
 export default function TeacherDashboard() {
-  // Mock data for classrooms and recent sessions
-  const activeClassrooms = [
-    { id: 'math-101', name: 'Calculus I', code: 'CAL-101', students: 42, status: 'live' },
-    { id: 'cs-301', name: 'Introduction to Algorithms', code: 'CS-301', students: 0, status: 'scheduled' }
-  ]
+  const [activeClassrooms, setActiveClassrooms] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
+  useEffect(() => {
+    fetchClassrooms()
+  }, [])
+
+  const fetchClassrooms = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('http://localhost:8000/api/classrooms/', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch classrooms')
+      }
+      const data = await response.json()
+      setActiveClassrooms(data)
+    } catch (err) {
+      console.error(err)
+      setError('Could not load classrooms.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Mock data for recent sessions (since sessions are not yet implemented)
   const recentSessions = [
     { date: '2026-08-19', name: 'Calculus I (Lecture 14)', avgAttention: '82%', peakConfusion: '18%' },
     { date: '2026-08-18', name: 'Intro to Algorithms (Lecture 2)', avgAttention: '78%', peakConfusion: '22%' },
@@ -36,40 +58,48 @@ export default function TeacherDashboard() {
         {/* Main Class List */}
         <div className="md:col-span-2 space-y-6">
           <div className="space-y-4">
-            <h3 className="text-h3">Active & Scheduled Classrooms <span className="text-[10px] font-normal text-warning-600 bg-warning-50 px-2 py-0.5 rounded ml-2 align-middle">Demo Data</span></h3>
+            <h3 className="text-h3">Active & Scheduled Classrooms</h3>
             
-            <div className="space-y-3">
-              {activeClassrooms.map((room) => (
-                <div key={room.id} className="card-panel flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-panel-bg">
-                  <div>
-                    <h4 className="font-semibold text-brand-navy">{room.name}</h4>
-                    <div className="text-xs text-text-muted mt-1 space-x-2">
-                      <span>Code: <code className="bg-neutral-light border px-1 rounded">{room.code}</code></span>
-                      <span>&bull;</span>
-                      <span>{room.students} enrolled students</span>
+            {loading ? (
+              <p className="text-xs text-text-muted">Loading classrooms...</p>
+            ) : error ? (
+              <p className="text-xs text-danger-600">{error}</p>
+            ) : activeClassrooms.length === 0 ? (
+              <div className="card-panel text-center py-8">
+                <p className="text-sm text-text-muted">No classrooms found. Create one to get started.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activeClassrooms.map((room) => (
+                  <div key={room.id} className="card-panel flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-panel-bg">
+                    <div>
+                      <h4 className="font-semibold text-brand-navy">{room.name}</h4>
+                      <div className="text-xs text-text-muted mt-1 space-x-2">
+                        <span>Code: <code className="bg-neutral-light border px-1 rounded font-bold text-brand-navy">{room.join_code}</code></span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {room.is_active ? (
+                        <>
+                          <StatusBadge status="success" label="Active" />
+                          <Link to={`/teacher/classroom/${room.id}`}>
+                            <Button variant="primary" className="text-xs py-1.5 px-3">View Live Dashboard</Button>
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <StatusBadge status="info" label="Inactive" />
+                          <Link to={`/teacher/classroom/${room.id}`}>
+                            <Button variant="secondary" className="text-xs py-1.5 px-3">View Details</Button>
+                          </Link>
+                        </>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3">
-                    {room.status === 'live' ? (
-                      <>
-                        <StatusBadge status="success" label="Active Live" />
-                        <Link to={`/teacher/classroom/${room.id}`}>
-                          <Button variant="primary" className="text-xs py-1.5 px-3">View Live Dashboard</Button>
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <StatusBadge status="info" label="Inactive" />
-                        <Link to={`/teacher/classroom/${room.id}`}>
-                          <Button variant="secondary" className="text-xs py-1.5 px-3">Activate Session</Button>
-                        </Link>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Recent History Table */}

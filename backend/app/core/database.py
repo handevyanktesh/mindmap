@@ -19,6 +19,8 @@ def connect_to_mongo():
         
         # Create indexes
         db.users.create_index("email", unique=True)
+        db.classrooms.create_index("join_code", unique=True)
+        db.classrooms.create_index("teacher_id")
         
         print(f"Connected to MongoDB Atlas database: {settings.DATABASE_NAME}")
     except ConnectionFailure as e:
