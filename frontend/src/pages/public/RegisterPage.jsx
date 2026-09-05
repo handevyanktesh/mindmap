@@ -3,27 +3,33 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Input from '../../components/Input'
 import Button from '../../components/Button'
+import { useAuth } from '../../context/AuthContext'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const { register } = useAuth()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('student')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault()
     if (!name || !email || !password) {
       setError('All fields are required.')
       return
     }
     setError('')
-    // Mock routing based on registration role selection
-    if (role === 'teacher') {
-      navigate('/teacher')
+    setLoading(true)
+
+    const result = await register(name, email, password, role)
+    if (result.success) {
+      navigate('/login')
     } else {
-      navigate('/student')
+      setError(result.error)
+      setLoading(false)
     }
   }
 
@@ -49,6 +55,7 @@ export default function RegisterPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
+            disabled={loading}
           />
 
           <Input
@@ -59,6 +66,7 @@ export default function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={loading}
           />
 
           <Input
@@ -69,6 +77,7 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={loading}
           />
 
           {/* Role selection radio grid */}
@@ -77,7 +86,7 @@ export default function RegisterPage() {
               Registration Role
             </span>
             <div className="grid grid-cols-2 gap-3">
-              <label className={`border rounded p-3 text-center cursor-pointer transition-colors ${
+              <label className={`border rounded p-3 text-center transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
                 role === 'student'
                   ? 'border-primary-600 bg-primary-50/55 text-primary-600 font-semibold'
                   : 'border-neutral-border hover:bg-neutral-light'
@@ -89,11 +98,12 @@ export default function RegisterPage() {
                   className="sr-only"
                   checked={role === 'student'}
                   onChange={() => setRole('student')}
+                  disabled={loading}
                 />
                 <span className="text-xs">Student</span>
               </label>
 
-              <label className={`border rounded p-3 text-center cursor-pointer transition-colors ${
+              <label className={`border rounded p-3 text-center transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
                 role === 'teacher'
                   ? 'border-accent-600 bg-accent-50/55 text-accent-600 font-semibold'
                   : 'border-neutral-border hover:bg-neutral-light'
@@ -105,14 +115,15 @@ export default function RegisterPage() {
                   className="sr-only"
                   checked={role === 'teacher'}
                   onChange={() => setRole('teacher')}
+                  disabled={loading}
                 />
                 <span className="text-xs">Teacher</span>
               </label>
             </div>
           </div>
 
-          <Button type="submit" variant="primary" className="w-full pt-2">
-            Create Account
+          <Button type="submit" variant="primary" className="w-full pt-2" disabled={loading}>
+            {loading ? 'Creating Account...' : 'Create Account'}
           </Button>
         </form>
 

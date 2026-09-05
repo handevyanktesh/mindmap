@@ -1,8 +1,10 @@
 import React from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 export default function DashboardLayout() {
   const location = useLocation()
+  const { user, logout } = useAuth()
   const isTeacherRoute = location.pathname.startsWith('/teacher')
 
   return (
@@ -42,14 +44,14 @@ export default function DashboardLayout() {
 
           <div className="flex items-center gap-4">
             <span className="text-xs text-text-muted font-medium hidden sm:inline">
-              Mock User ({isTeacherRoute ? 'Instructor' : 'Student'})
+              {user ? `${user.name} (${user.role})` : 'Loading...'}
             </span>
-            <Link
-              to="/"
+            <button
+              onClick={logout}
               className="text-xs font-semibold text-danger-600 hover:text-danger-700 bg-danger-50 px-2.5 py-1 rounded"
             >
               Sign Out
-            </Link>
+            </button>
           </div>
         </div>
       </header>

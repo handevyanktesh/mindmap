@@ -3,25 +3,35 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Input from '../../components/Input'
 import Button from '../../components/Button'
+import { useAuth } from '../../context/AuthContext'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e, role) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     if (!email || !password) {
       setError('Please fill in both email and password.')
       return
     }
     setError('')
-    // Simulate navigation based on selected target role
-    if (role === 'teacher') {
-      navigate('/teacher')
+    setLoading(true)
+    
+    const result = await login(email, password)
+    if (result.success) {
+      if (result.role === 'teacher') {
+        navigate('/teacher')
+      } else {
+        navigate('/student')
+      }
     } else {
-      navigate('/student')
+      setError(result.error)
+      setLoading(false)
     }
   }
 
@@ -33,7 +43,7 @@ export default function LoginPage() {
           <p className="text-body text-xs">Access your classroom engagement dashboard</p>
         </div>
 
-        <form className="space-y-4" onSubmit={(e) => handleLogin(e, 'student')}>
+        <form className="space-y-4" onSubmit={handleLogin}>
           {error && (
             <div className="p-3 bg-danger-50 border border-danger-200 text-danger-600 text-xs rounded font-medium">
               {error}
@@ -48,6 +58,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={loading}
           />
 
           <Input
@@ -58,16 +69,12 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={loading}
           />
 
           <div className="flex flex-col gap-3 pt-2">
-            {/* Quick action buttons to select dashboard roles directly */}
-            <Button type="button" variant="primary" onClick={(e) => handleLogin(e, 'student')}>
-              Sign In as Student
-            </Button>
-            
-            <Button type="button" variant="secondary" onClick={(e) => handleLogin(e, 'teacher')}>
-              Sign In as Teacher
+            <Button type="submit" variant="primary" disabled={loading}>
+              {loading ? 'Signing In...' : 'Sign In'}
             </Button>
           </div>
         </form>
