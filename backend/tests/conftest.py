@@ -22,6 +22,14 @@ def test_db():
     db.sessions.create_index("teacher_id")
     db.sessions.create_index("status")
     db.sessions.create_index([("classroom_id", 1), ("created_at", -1)])
+    db.participants.create_index("session_id")
+    db.participants.create_index("student_id")
+    db.participants.create_index("classroom_id")
+    db.participants.create_index(
+        [("session_id", 1), ("student_id", 1)],
+        unique=True,
+        partialFilterExpression={"status": "joined"}
+    )
     
     yield db
     

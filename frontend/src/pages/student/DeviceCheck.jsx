@@ -8,8 +8,10 @@ export default function DeviceCheck() {
   const navigate = useNavigate()
   const location = useLocation()
   
-  // Retrieve passed classroomId from route state or default to demo ID
+  const sessionId = location.state?.sessionId
   const classroomId = location.state?.classroomId || 'math-101'
+  const sessionTitle = location.state?.sessionTitle
+  const classroomName = location.state?.classroomName
 
   const [camStatus, setCamStatus] = useState('pending')
   const [micStatus, setMicStatus] = useState('pending')
@@ -25,7 +27,10 @@ export default function DeviceCheck() {
   }
 
   const handleContinue = () => {
-    navigate(`/student/classroom/${classroomId}`)
+    const targetId = sessionId || classroomId
+    navigate(`/student/classroom/${targetId}`, {
+      state: location.state
+    })
   }
 
   return (
@@ -35,7 +40,9 @@ export default function DeviceCheck() {
           &larr; Exit Session Setup
         </Link>
         <h2 className="text-h1 mt-2">Device Diagnostics Check</h2>
-        <p className="text-body text-xs mt-1">Verify browser capabilities before entering classroom session</p>
+        <p className="text-body text-xs mt-1">
+          {sessionTitle ? `Session: ${sessionTitle} (${classroomName || 'Classroom'})` : 'Verify browser capabilities before entering classroom session'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

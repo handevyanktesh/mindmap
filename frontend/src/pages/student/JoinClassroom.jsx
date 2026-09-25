@@ -9,25 +9,50 @@ export default function JoinClassroom() {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
 
-  const handleJoin = (e) => {
+  const [loading, setLoading] = useState(false)
+
+  const handleJoin = async (e) => {
     e.preventDefault()
-    if (!code.trim()) {
+    const cleanCode = code.trim().toUpperCase()
+    if (!cleanCode) {
       setError('Classroom access code is required.')
       return
     }
     
-    // Simulate simple valid code check (e.g. must be alphanumeric and > 3 characters)
-    if (code.length < 4) {
-      setError('Invalid code format. Codes must contain at least 4 characters.')
-      return
-    }
-
     setError('')
-    // After joining, we send them to the Device Check page (as step before classroom) 
-    // or directly to the classroom. Let's send them to the check page or room.
-    // The requirement says: Join Classroom page -> Camera/device check page -> Student classroom page.
-    // So we navigate to `/student/check` passing the classroom code state if needed.
-    navigate('/student/check', { state: { classroomId: code.trim().toLowerCase() } })
+    setLoading(true)
+
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`http://localhost:8000/api/classrooms/code/${cleanCode}/active-session`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (res.status === 401) {
+        navigate('/login')
+        return
+      }
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.detail || 'Could not find an active session for this code.')
+      }
+
+      const data = await res.json()
+      navigate('/student/check', {
+        state: {
+          classroomId: data.classroom_id,
+          classroomName: data.classroom_name,
+          joinCode: data.join_code,
+          sessionId: data.session_id,
+          sessionTitle: data.session_title
+        }
+      })
+    } catch (err) {
+      setError(err.message || 'Error connecting to session.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -54,8 +79,8 @@ export default function JoinClassroom() {
             autoFocus
           />
 
-          <Button type="submit" variant="primary" className="w-full pt-2">
-            Verify Code
+          <Button type="submit" variant="primary" className="w-full pt-2" disabled={loading}>
+            {loading ? 'Verifying Code...' : 'Verify Code'}
           </Button>
         </form>
 

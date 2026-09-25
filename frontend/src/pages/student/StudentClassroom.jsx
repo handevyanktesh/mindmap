@@ -1,29 +1,142 @@
-import React from 'react'
-import { useParams, Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
 
 export default function StudentClassroom() {
   const { id } = useParams()
+  const location = useLocation()
+  const navigate = useNavigate()
 
-  // Format ID for clean display
-  const courseTitle = id === 'math-101' ? 'Calculus I (CAL-101)' : `Classroom session: ${id?.toUpperCase()}`
+  const [participation, setParticipation] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [leaving, setLeaving] = useState(false)
+
+  const classroomName = location.state?.classroomName
+  const sessionTitle = location.state?.sessionTitle
+  const courseTitle = sessionTitle
+    ? `${sessionTitle} (${classroomName || 'Classroom'})`
+    : `Classroom Session: ${id?.substring(0, 8)}...`
+
+  useEffect(() => {
+    let isMounted = true
+
+    const joinSession = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) {
+          navigate('/login')
+          return
+        }
+
+        // Attempt to join the session
+        const res = await fetch(`http://localhost:8000/api/sessions/${id}/join`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+        if (res.status === 401) {
+          navigate('/login')
+          return
+        }
+
+        if (res.ok) {
+          const data = await res.json()
+          if (isMounted) setParticipation(data)
+        } else {
+          const errData = await res.json()
+          // If already joined, retrieve current participation record
+          if (res.status === 400 && errData.detail && errData.detail.includes('already')) {
+            const partRes = await fetch(`http://localhost:8000/api/sessions/${id}/participation`, {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+            if (partRes.ok) {
+              const partData = await partRes.json()
+              if (isMounted) setParticipation(partData)
+            }
+          } else {
+            if (isMounted) setError(errData.detail || 'Failed to join session.')
+          }
+        }
+      } catch (err) {
+        if (isMounted) setError('Network error joining session.')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    joinSession()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id, navigate])
+
+  const handleLeaveSession = async () => {
+    setLeaving(true)
+    try {
+      const token = localStorage.getItem('token')
+      await fetch(`http://localhost:8000/api/sessions/${id}/leave`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    } catch (err) {
+      console.error('Error leaving session:', err)
+    } finally {
+      navigate('/student')
+    }
+  }
+
+  if (loading) {
+    return (
+      <PageContainer size="large" className="py-12 text-center">
+        <p className="text-xs text-text-muted">Connecting and joining session...</p>
+      </PageContainer>
+    )
+  }
+
+  if (error) {
+    return (
+      <PageContainer size="small" className="py-12">
+        <div className="card-panel space-y-4 text-center">
+          <h3 className="text-h3 text-danger-600">Unable to Join Session</h3>
+          <p className="text-xs text-text-muted">{error}</p>
+          <div className="pt-2">
+            <Link to="/student">
+              <Button variant="primary">Return to Student Portal</Button>
+            </Link>
+          </div>
+        </div>
+      </PageContainer>
+    )
+  }
 
   return (
     <PageContainer size="large" className="py-6 space-y-6">
       {/* Classroom Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <StatusBadge status="success" label="Active Sync" />
+          <StatusBadge status="success" label="Active Participant" />
           <div>
             <h2 className="font-bold text-brand-navy text-base">{courseTitle}</h2>
-            <p className="text-[10px] text-text-muted">Instructor: Dr. Alan Turing &bull; Live Lecture Session</p>
+            <p className="text-[10px] text-text-muted">
+              Live Session &bull; Joined at {participation?.joined_at ? new Date(participation.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}
+            </p>
           </div>
         </div>
-        <Link to="/student">
-          <Button variant="secondary" className="text-xs py-1.5 px-3">Exit Room</Button>
-        </Link>
+        <Button
+          variant="secondary"
+          onClick={handleLeaveSession}
+          disabled={leaving}
+          className="text-xs py-1.5 px-3 border-danger-200 text-danger-600 hover:bg-danger-50"
+        >
+          {leaving ? 'Leaving...' : 'Exit Room'}
+        </Button>
       </div>
 
       {/* Main Classroom Workspace Grid */}

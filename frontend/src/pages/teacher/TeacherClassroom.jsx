@@ -11,6 +11,7 @@ export default function TeacherClassroom() {
   
   const [classroom, setClassroom] = useState(null)
   const [sessions, setSessions] = useState([])
+  const [participants, setParticipants] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sessionError, setSessionError] = useState('')
@@ -56,6 +57,20 @@ export default function TeacherClassroom() {
       if (sessRes.ok) {
         const sessData = await sessRes.json()
         setSessions(sessData)
+
+        // 3. Fetch participants for the active or latest session
+        const curr = sessData.find((s) => s.status === 'active') || sessData.find((s) => s.status === 'scheduled') || sessData[0]
+        if (curr) {
+          const partRes = await fetch(`http://localhost:8000/api/sessions/${curr.id}/participants`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          if (partRes.ok) {
+            const partData = await partRes.json()
+            setParticipants(partData)
+          }
+        } else {
+          setParticipants([])
+        }
       }
     } catch (err) {
       console.error(err)
@@ -464,40 +479,52 @@ export default function TeacherClassroom() {
       {/* Roster & Anomaly Alert Split Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Side: Student metrics list */}
+        {/* Left Side: Real Session Participants */}
         <div className="lg:col-span-2 space-y-4">
           <div className="card-panel space-y-4">
-            <h3 className="text-h3 border-b border-neutral-border pb-3">Student Engagement Logs</h3>
-            
-            <div className="divide-y divide-neutral-border">
-              {studentRoster.map((student, idx) => (
-                <div key={idx} className="flex justify-between items-center py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-neutral-light border border-neutral-border flex items-center justify-center font-bold text-xs text-brand-navy">
-                      {student.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-brand-navy">{student.name}</div>
-                      <div className="text-[10px] text-text-muted">Metrics calculated locally</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="text-right text-xs">
-                      <div>Engagement: <strong className="text-primary-600">{student.attention}</strong></div>
-                      <div>Confusion Signal: <strong className="text-warning-600">{student.confusion}</strong></div>
-                    </div>
-                    {student.status === 'attentive' ? (
-                      <StatusBadge status="success" label="Active" />
-                    ) : student.status === 'confused' ? (
-                      <StatusBadge status="warning" label="Confused" />
-                    ) : (
-                      <StatusBadge status="danger" label="Away" />
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="flex justify-between items-center border-b border-neutral-border pb-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-h3">Session Participants</h3>
+                <span className="text-xs bg-primary-50 text-primary-600 font-bold px-2 py-0.5 rounded-full border border-primary-100">
+                  {participants.filter(p => p.status === 'joined').length} Active
+                </span>
+              </div>
+              <span className="text-[10px] text-text-muted">Total Enrolled in Session: {participants.length}</span>
             </div>
+
+            {participants.length === 0 ? (
+              <p className="text-xs text-text-muted py-6 text-center">
+                No students have joined this session yet. Share the classroom code for students to enter when active.
+              </p>
+            ) : (
+              <div className="divide-y divide-neutral-border">
+                {participants.map((p) => (
+                  <div key={p.id} className="flex justify-between items-center py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-neutral-light border border-neutral-border flex items-center justify-center font-bold text-xs text-brand-navy">
+                        {p.student_name ? p.student_name.split(' ').map((n) => n[0]).join('') : 'S'}
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-brand-navy">{p.student_name}</div>
+                        <div className="text-[10px] text-text-muted">{p.student_email}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs">
+                      <span className="text-[10px] text-text-muted hidden sm:inline">
+                        Joined: {new Date(p.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {p.left_at && ` • Left: ${new Date(p.left_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                      </span>
+                      {p.status === 'joined' ? (
+                        <StatusBadge status="success" label="Joined" />
+                      ) : (
+                        <StatusBadge status="info" label="Left" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
