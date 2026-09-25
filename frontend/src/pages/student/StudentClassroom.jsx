@@ -4,6 +4,7 @@ import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
 import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
+import { useCamera } from '../../hooks/useCamera'
 
 export default function StudentClassroom() {
   const { id } = useParams()
@@ -16,11 +17,23 @@ export default function StudentClassroom() {
   const [leaving, setLeaving] = useState(false)
 
   const token = localStorage.getItem('token')
+  const isJoined = participation !== null && participation.status === 'joined'
+
+  // Real-time WebSocket connection
   const { isConnected: isWsConnected } = useSessionWebSocket(
     id,
     token,
-    participation !== null && participation.status === 'joined'
+    isJoined
   )
+
+  // Browser webcam preview (100% local, no raw frames transmitted)
+  const {
+    videoRef,
+    status: cameraStatus,
+    error: cameraError,
+    startCamera,
+    stopCamera
+  } = useCamera(isJoined)
 
   const classroomName = location.state?.classroomName
   const sessionTitle = location.state?.sessionTitle
@@ -86,6 +99,7 @@ export default function StudentClassroom() {
   }, [id, navigate])
 
   const handleLeaveSession = async () => {
+    stopCamera()
     setLeaving(true)
     try {
       const token = localStorage.getItem('token')
@@ -191,20 +205,55 @@ export default function StudentClassroom() {
         <div className="space-y-6">
           {/* Self view camera wrapper */}
           <div className="card-panel bg-panel-bg space-y-4">
-            <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Self-View Monitor</h3>
-            
-            {/* Simulated webcam video feed placeholder */}
-            <div className="bg-neutral-light border border-neutral-border rounded aspect-video flex flex-col items-center justify-center text-center p-4 relative overflow-hidden">
-              <span className="text-xs text-text-muted font-mono bg-panel-bg px-2 py-1 rounded shadow-sm z-10 border border-neutral-border">
-                [ CAMERA PREVIEW ACTIVE ]
-              </span>
-              <p className="text-[9px] text-text-muted mt-2 max-w-[140px] z-10 font-sans">
-                Webcam stream processed 100% locally.
-              </p>
-              {/* Subtle design frame layout */}
-              <div className="absolute inset-0 border-2 border-neutral-border/60"></div>
-              <div className="absolute top-2 right-2 w-2.5 h-2.5 bg-emerald-500 rounded-full"></div>
+            <div className="flex justify-between items-center border-b border-neutral-border pb-2">
+              <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Self-View Monitor</h3>
+              {cameraStatus === 'active' && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-600">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  Camera Active
+                </span>
+              )}
             </div>
+            
+            {/* Live camera preview container */}
+            <div className="bg-neutral-light border border-neutral-border rounded aspect-video flex flex-col items-center justify-center text-center relative overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover ${cameraStatus === 'active' ? 'block' : 'hidden'}`}
+              />
+
+              {cameraStatus === 'requesting' && (
+                <div className="p-4 space-y-1">
+                  <p className="text-xs font-semibold text-brand-navy">Starting camera...</p>
+                  <p className="text-[10px] text-text-muted">Waiting for browser permission</p>
+                </div>
+              )}
+
+              {cameraStatus === 'idle' && (
+                <div className="p-4 space-y-2">
+                  <p className="text-xs text-text-muted">Camera access required</p>
+                  <Button variant="secondary" onClick={startCamera} className="text-xs py-1 px-3">
+                    Enable Camera
+                  </Button>
+                </div>
+              )}
+
+              {cameraStatus === 'error' && (
+                <div className="p-4 space-y-2 text-center">
+                  <p className="text-xs font-semibold text-danger-600">{cameraError || 'Camera unavailable'}</p>
+                  <Button variant="secondary" onClick={startCamera} className="text-xs py-1 px-3">
+                    Retry Permission
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[9px] text-text-muted text-center font-sans">
+              Webcam stream is processed 100% locally. Raw video is never transmitted.
+            </p>
           </div>
 
           {/* Behavioural coefficients */}
