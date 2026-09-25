@@ -2,6 +2,7 @@ from typing import List
 from fastapi import APIRouter, Depends
 from app.api.deps import get_db, require_teacher, get_current_user
 from app.schemas.classroom import ClassroomCreate, ClassroomUpdate, ClassroomResponse
+from app.schemas.session import SessionResponse
 from app.services.classroom_service import (
     create_classroom,
     get_classrooms_for_teacher,
@@ -9,6 +10,7 @@ from app.services.classroom_service import (
     update_classroom,
     delete_classroom
 )
+from app.services.session_service import list_classroom_sessions
 
 router = APIRouter()
 
@@ -56,3 +58,12 @@ def delete(
     current_user: dict = Depends(require_teacher)
 ):
     return delete_classroom(db, classroom_id, current_user["id"])
+
+@router.get("/{classroom_id}/sessions", response_model=List[SessionResponse])
+def get_sessions(
+    classroom_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return list_classroom_sessions(db, classroom_id, current_user["id"])
+

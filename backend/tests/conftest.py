@@ -18,6 +18,10 @@ def test_db():
     db.users.create_index("email", unique=True)
     db.classrooms.create_index("join_code", unique=True)
     db.classrooms.create_index("teacher_id")
+    db.sessions.create_index("classroom_id")
+    db.sessions.create_index("teacher_id")
+    db.sessions.create_index("status")
+    db.sessions.create_index([("classroom_id", 1), ("created_at", -1)])
     
     yield db
     

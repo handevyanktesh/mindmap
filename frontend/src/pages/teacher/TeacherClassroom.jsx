@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
+import Input from '../../components/Input'
 import StatusBadge from '../../components/StatusBadge'
 
 export default function TeacherClassroom() {
@@ -9,38 +10,173 @@ export default function TeacherClassroom() {
   const navigate = useNavigate()
   
   const [classroom, setClassroom] = useState(null)
+  const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [sessionError, setSessionError] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
+
+  // Create session form state
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newDescription, setNewDescription] = useState('')
+  const [newScheduledAt, setNewScheduledAt] = useState('')
+
+  const fetchClassroomAndSessions = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        navigate('/login')
+        return
+      }
+
+      // 1. Fetch classroom
+      const classRes = await fetch(`http://localhost:8000/api/classrooms/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      
+      if (classRes.status === 401) {
+        navigate('/login')
+        return
+      }
+      if (classRes.status === 403) {
+        navigate('/teacher')
+        return
+      }
+      if (!classRes.ok) {
+        throw new Error('Failed to load classroom details')
+      }
+      const classData = await classRes.json()
+      setClassroom(classData)
+
+      // 2. Fetch sessions
+      const sessRes = await fetch(`http://localhost:8000/api/classrooms/${id}/sessions`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (sessRes.ok) {
+        const sessData = await sessRes.json()
+        setSessions(sessData)
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Could not load classroom or session details.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchClassroom = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        const response = await fetch(`http://localhost:8000/api/classrooms/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        
-        if (response.status === 401 || response.status === 403) {
-          navigate('/teacher')
-          return
-        }
-        
-        if (!response.ok) {
-          throw new Error('Failed to load classroom details')
-        }
-        
-        const data = await response.json()
-        setClassroom(data)
-      } catch (err) {
-        console.error(err)
-        setError('Could not load classroom.')
-      } finally {
-        setLoading(false)
-      }
-    }
-    
-    fetchClassroom()
+    fetchClassroomAndSessions()
   }, [id, navigate])
+
+  const handleCreateSession = async (e) => {
+    e.preventDefault()
+    if (!newTitle.trim()) {
+      setSessionError('Session title is required.')
+      return
+    }
+
+    setSessionError('')
+    setActionLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const payload = {
+        classroom_id: id,
+        title: newTitle.trim(),
+        description: newDescription.trim() || null,
+        scheduled_at: newScheduledAt ? new Date(newScheduledAt).toISOString() : null
+      }
+
+      const res = await fetch('http://localhost:8000/api/sessions/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (res.status === 401) {
+        navigate('/login')
+        return
+      }
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.detail || 'Failed to create session')
+      }
+
+      setNewTitle('')
+      setNewDescription('')
+      setNewScheduledAt('')
+      setShowCreateForm(false)
+      await fetchClassroomAndSessions()
+    } catch (err) {
+      setSessionError(err.message || 'Error creating session')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleStartSession = async (sessionId) => {
+    setSessionError('')
+    setActionLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`http://localhost:8000/api/sessions/${sessionId}/start`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (res.status === 401) {
+        navigate('/login')
+        return
+      }
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.detail || 'Failed to start session')
+      }
+
+      await fetchClassroomAndSessions()
+    } catch (err) {
+      setSessionError(err.message || 'Error starting session')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleEndSession = async (sessionId) => {
+    setSessionError('')
+    setActionLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`http://localhost:8000/api/sessions/${sessionId}/end`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (res.status === 401) {
+        navigate('/login')
+        return
+      }
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.detail || 'Failed to end session')
+      }
+
+      await fetchClassroomAndSessions()
+    } catch (err) {
+      setSessionError(err.message || 'Error ending session')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const activeSession = sessions.find((s) => s.status === 'active')
+  const scheduledSession = sessions.find((s) => s.status === 'scheduled')
+  const currentSession = activeSession || scheduledSession || (sessions.length > 0 ? sessions[0] : null)
 
   const courseTitle = classroom ? classroom.name : `Classroom session: ${id?.toUpperCase()}`
 
@@ -69,22 +205,189 @@ export default function TeacherClassroom() {
 
   return (
     <PageContainer size="large" className="py-6 space-y-6">
-      
+      {sessionError && (
+        <div className="p-3 bg-danger-50 border border-danger-200 text-danger-600 text-xs rounded font-medium flex justify-between items-center">
+          <span>{sessionError}</span>
+          <button onClick={() => setSessionError('')} className="text-danger-600 hover:text-danger-800 text-sm font-bold ml-2">&times;</button>
+        </div>
+      )}
+
       {/* Session header banner */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm">
         <div className="flex items-center gap-3">
-          {classroom?.is_active ? <StatusBadge status="success" label="Active Live Feed" /> : <StatusBadge status="info" label="Inactive" />}
+          {activeSession ? (
+            <StatusBadge status="success" label="Active Live Session" />
+          ) : scheduledSession ? (
+            <StatusBadge status="warning" label="Session Scheduled" />
+          ) : (
+            <StatusBadge status="info" label={classroom?.is_active ? 'No Active Session' : 'Inactive Room'} />
+          )}
           <div>
             <h2 className="font-bold text-brand-navy text-base">
-              {courseTitle} 
-              <span className="text-[10px] font-normal text-warning-600 bg-warning-50 px-2 py-0.5 rounded ml-2 align-middle">Demo Data</span>
+              {currentSession ? `${courseTitle} — ${currentSession.title}` : courseTitle}
+              <span className="text-[10px] font-normal text-warning-600 bg-warning-50 px-2 py-0.5 rounded ml-2 align-middle">Demo Telemetry</span>
             </h2>
-            <p className="text-[10px] text-text-muted">Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{classroom?.join_code}</code></p>
+            <div className="text-[10px] text-text-muted mt-0.5 space-x-2">
+              <span>Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{classroom?.join_code}</code></span>
+              {activeSession && activeSession.started_at && (
+                <span>&bull; Started: {new Date(activeSession.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+              {currentSession && currentSession.status === 'scheduled' && currentSession.scheduled_at && (
+                <span>&bull; Scheduled: {new Date(currentSession.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+            </div>
           </div>
         </div>
-        <Link to="/teacher">
-          <Button variant="secondary" className="text-xs py-1.5 px-3">Dashboard</Button>
-        </Link>
+
+        <div className="flex items-center gap-2">
+          {activeSession && (
+            <Button
+              variant="secondary"
+              onClick={() => handleEndSession(activeSession.id)}
+              disabled={actionLoading}
+              className="text-xs py-1.5 px-3 border-danger-200 text-danger-600 hover:bg-danger-50"
+            >
+              {actionLoading ? 'Ending...' : 'End Live Session'}
+            </Button>
+          )}
+
+          {!activeSession && scheduledSession && (
+            <Button
+              variant="primary"
+              onClick={() => handleStartSession(scheduledSession.id)}
+              disabled={actionLoading}
+              className="text-xs py-1.5 px-3"
+            >
+              {actionLoading ? 'Starting...' : 'Start Session'}
+            </Button>
+          )}
+
+          <Link to="/teacher">
+            <Button variant="secondary" className="text-xs py-1.5 px-3">Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Classroom Sessions Management Section */}
+      <div className="card-panel space-y-4">
+        <div className="flex justify-between items-center border-b border-neutral-border pb-3">
+          <div>
+            <h3 className="text-h3 text-sm font-semibold text-brand-navy">Classroom Sessions</h3>
+            <p className="text-xs text-text-muted mt-0.5">Manage live and scheduled teaching events for this room</p>
+          </div>
+          <Button
+            variant={showCreateForm ? 'secondary' : 'accent'}
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="text-xs py-1 px-3"
+          >
+            {showCreateForm ? 'Cancel' : '+ New Session'}
+          </Button>
+        </div>
+
+        {/* Inline Create Session Form */}
+        {showCreateForm && (
+          <form onSubmit={handleCreateSession} className="bg-neutral-light border border-neutral-border rounded p-4 space-y-3">
+            <h4 className="text-xs font-semibold text-brand-navy">Create a New Session</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Session Title"
+                id="session-title"
+                placeholder="e.g. Lecture 4: Binary Trees"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                required
+                disabled={actionLoading}
+              />
+              <Input
+                label="Scheduled Time (Optional)"
+                id="session-scheduled"
+                type="datetime-local"
+                value={newScheduledAt}
+                onChange={(e) => setNewScheduledAt(e.target.value)}
+                disabled={actionLoading}
+              />
+            </div>
+            <div>
+              <label htmlFor="session-desc" className="block text-xs font-semibold text-brand-navy-light mb-1">
+                Description (Optional)
+              </label>
+              <textarea
+                id="session-desc"
+                rows="2"
+                className="input-text resize-none text-xs"
+                placeholder="Topic notes or outline for this session..."
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                disabled={actionLoading}
+              />
+            </div>
+            <div className="flex gap-2 justify-end pt-1">
+              <Button variant="secondary" onClick={() => setShowCreateForm(false)} className="text-xs py-1 px-3" disabled={actionLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" className="text-xs py-1 px-3" disabled={actionLoading}>
+                {actionLoading ? 'Creating...' : 'Create Session'}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Sessions List */}
+        {sessions.length === 0 ? (
+          <p className="text-xs text-text-muted py-2 text-center">No sessions created yet. Click "+ New Session" to schedule or start a session.</p>
+        ) : (
+          <div className="space-y-2">
+            {sessions.map((sess) => (
+              <div
+                key={sess.id}
+                className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 p-3 rounded border border-neutral-border/70 hover:bg-neutral-light/50 transition-colors"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-xs text-brand-navy">{sess.title}</span>
+                    {sess.status === 'active' && <StatusBadge status="success" label="Active" />}
+                    {sess.status === 'scheduled' && <StatusBadge status="warning" label="Scheduled" />}
+                    {sess.status === 'ended' && <StatusBadge status="info" label="Ended" />}
+                  </div>
+                  {sess.description && (
+                    <p className="text-[11px] text-text-muted mt-0.5">{sess.description}</p>
+                  )}
+                  <div className="text-[10px] text-text-muted mt-1 space-x-2">
+                    <span>Created: {new Date(sess.created_at).toLocaleDateString()}</span>
+                    {sess.started_at && <span>&bull; Started: {new Date(sess.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                    {sess.ended_at && <span>&bull; Ended: {new Date(sess.ended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {sess.status === 'scheduled' && (
+                    <Button
+                      variant="primary"
+                      onClick={() => handleStartSession(sess.id)}
+                      disabled={actionLoading}
+                      className="text-xs py-1 px-2.5"
+                    >
+                      Start Session
+                    </Button>
+                  )}
+                  {sess.status === 'active' && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleEndSession(sess.id)}
+                      disabled={actionLoading}
+                      className="text-xs py-1 px-2.5 border-danger-200 text-danger-600 hover:bg-danger-50"
+                    >
+                      End Session
+                    </Button>
+                  )}
+                  {sess.status === 'ended' && (
+                    <span className="text-[11px] font-medium text-text-muted italic px-2">Completed</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Metric summaries widget grid */}
