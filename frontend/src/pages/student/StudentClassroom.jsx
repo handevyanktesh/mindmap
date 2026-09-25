@@ -3,6 +3,7 @@ import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
+import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 
 export default function StudentClassroom() {
   const { id } = useParams()
@@ -13,6 +14,13 @@ export default function StudentClassroom() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [leaving, setLeaving] = useState(false)
+
+  const token = localStorage.getItem('token')
+  const { isConnected: isWsConnected } = useSessionWebSocket(
+    id,
+    token,
+    participation !== null && participation.status === 'joined'
+  )
 
   const classroomName = location.state?.classroomName
   const sessionTitle = location.state?.sessionTitle
@@ -122,6 +130,7 @@ export default function StudentClassroom() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm">
         <div className="flex items-center gap-3">
           <StatusBadge status="success" label="Active Participant" />
+          {isWsConnected && <StatusBadge status="info" label="Realtime Sync" />}
           <div>
             <h2 className="font-bold text-brand-navy text-base">{courseTitle}</h2>
             <p className="text-[10px] text-text-muted">

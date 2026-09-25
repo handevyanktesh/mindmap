@@ -16,24 +16,32 @@ def get_db():
         raise HTTPException(status_code=500, detail="Database not initialized")
     return db
 
-def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)) -> dict:
+def get_user_from_token(token: Optional[str], db) -> Optional[dict]:
+    if not token:
+        return None
     try:
         payload = jwt.decode(
             token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
         )
         token_data = TokenPayload(**payload)
     except (jwt.PyJWTError, ValidationError):
+        return None
+    
+    user = db.users.find_one({"_id": token_data.sub})
+    if not user:
+        return None
+    
+    user_dict = dict(user)
+    user_dict["id"] = user_dict.pop("_id")
+    return user_dict
+
+def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)) -> dict:
+    user = get_user_from_token(token, db)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
-    
-    user = db.users.find_one({"_id": token_data.sub})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Map _id back to id for the response model if needed, but dicts have _id
-    user["id"] = user.pop("_id")
     return user
 
 def require_student(current_user: dict = Depends(get_current_user)):

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import connect_to_mongo, close_mongo_connection
-from app.routes import auth, classrooms, sessions
+from app.routes import auth, classrooms, sessions, ws
 import contextlib
 
 @contextlib.asynccontextmanager
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(classrooms.router, prefix="/api/classrooms", tags=["classrooms"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
+app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 
 @app.get("/health")
 def health_check():
