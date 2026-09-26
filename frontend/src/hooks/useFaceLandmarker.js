@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import { calculateEAR } from '../features/facial/eyeFeatures'
 import { calculateGaze } from '../features/facial/gazeFeatures'
+import { calculateHeadPose } from '../features/facial/headPoseFeatures'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
@@ -14,6 +15,12 @@ const INITIAL_GAZE = {
   leftGazeY: null,
   rightGazeY: null,
   gazeY: null
+}
+
+const INITIAL_HEAD_POSE = {
+  yaw: null,
+  pitch: null,
+  roll: null
 }
 
 /**
@@ -31,6 +38,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [landmarks, setLandmarks] = useState(null)
   const [earData, setEarData] = useState({ leftEAR: null, rightEAR: null, ear: null })
   const [gazeData, setGazeData] = useState(INITIAL_GAZE)
+  const [headPoseData, setHeadPoseData] = useState(INITIAL_HEAD_POSE)
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -39,6 +47,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const landmarksRef = useRef(null)
   const earDataRef = useRef({ leftEAR: null, rightEAR: null, ear: null })
   const gazeDataRef = useRef(INITIAL_GAZE)
+  const headPoseDataRef = useRef(INITIAL_HEAD_POSE)
   const lastStateUpdateTimeRef = useRef(0)
 
   // Initialize MediaPipe Face Landmarker once
@@ -129,9 +138,11 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setLandmarks(null)
       setEarData({ leftEAR: null, rightEAR: null, ear: null })
       setGazeData(INITIAL_GAZE)
+      setHeadPoseData(INITIAL_HEAD_POSE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
+      headPoseDataRef.current = INITIAL_HEAD_POSE
       lastVideoTimeRef.current = -1
       return
     }
@@ -177,6 +188,12 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               : INITIAL_GAZE
             gazeDataRef.current = currentGaze
 
+            // Compute Head Pose (Yaw, Pitch, Roll) from 3D landmarks
+            const currentPose = hasFace
+              ? calculateHeadPose(currentLandmarks)
+              : INITIAL_HEAD_POSE
+            headPoseDataRef.current = currentPose
+
             const nowTime = Date.now()
             // Throttle React state updates to avoid unnecessary 60fps re-renders
             // Trigger immediately on detection status transition
@@ -185,6 +202,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
                 setLandmarks(currentLandmarks)
                 setEarData(currentEAR)
                 setGazeData(currentGaze)
+                setHeadPoseData(currentPose)
                 lastStateUpdateTimeRef.current = nowTime
                 return hasFace
               }
@@ -193,6 +211,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
                 setLandmarks(currentLandmarks)
                 setEarData(currentEAR)
                 setGazeData(currentGaze)
+                setHeadPoseData(currentPose)
                 lastStateUpdateTimeRef.current = nowTime
               }
               return prev
@@ -220,9 +239,11 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setLandmarks(null)
       setEarData({ leftEAR: null, rightEAR: null, ear: null })
       setGazeData(INITIAL_GAZE)
+      setHeadPoseData(INITIAL_HEAD_POSE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
+      headPoseDataRef.current = INITIAL_HEAD_POSE
       lastVideoTimeRef.current = -1
     }
   }, [enabled, isReady, videoRef])
@@ -244,6 +265,10 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     rightGazeX: gazeData.rightGazeX,
     leftGazeY: gazeData.leftGazeY,
     rightGazeY: gazeData.rightGazeY,
-    gazeDataRef
+    gazeDataRef,
+    yaw: headPoseData.yaw,
+    pitch: headPoseData.pitch,
+    roll: headPoseData.roll,
+    headPoseDataRef
   }
 }

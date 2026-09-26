@@ -43,7 +43,10 @@ export default function StudentClassroom() {
     faceDetected,
     ear,
     gazeX,
-    gazeY
+    gazeY,
+    yaw,
+    pitch,
+    roll
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -299,6 +302,17 @@ export default function StudentClassroom() {
                         {gazeX !== null && typeof gazeX === 'number' ? gazeX.toFixed(2) : '--'}
                         {' / '}
                         {gazeY !== null && typeof gazeY === 'number' ? gazeY.toFixed(2) : '--'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-text-muted">
+                      <span>Local Head Pose (Y / P / R):</span>
+                      <span className="font-mono font-semibold text-brand-navy">
+                        {yaw !== null && typeof yaw === 'number' ? `${yaw > 0 ? '+' : ''}${yaw}°` : '--'}
+                        {' / '}
+                        {pitch !== null && typeof pitch === 'number' ? `${pitch > 0 ? '+' : ''}${pitch}°` : '--'}
+                        {' / '}
+                        {roll !== null && typeof roll === 'number' ? `${roll > 0 ? '+' : ''}${roll}°` : '--'}
                       </span>
                     </div>
                   </>
