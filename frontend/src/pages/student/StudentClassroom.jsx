@@ -5,6 +5,7 @@ import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
 import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 import { useCamera } from '../../hooks/useCamera'
+import { useFaceLandmarker } from '../../hooks/useFaceLandmarker'
 
 export default function StudentClassroom() {
   const { id } = useParams()
@@ -34,6 +35,13 @@ export default function StudentClassroom() {
     startCamera,
     stopCamera
   } = useCamera(isJoined)
+
+  // MediaPipe Face Landmarker (runs strictly browser-locally on active camera)
+  const {
+    isLoading: isLandmarkerLoading,
+    error: landmarkerError,
+    faceDetected
+  } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
   const sessionTitle = location.state?.sessionTitle
@@ -250,6 +258,28 @@ export default function StudentClassroom() {
                 </div>
               )}
             </div>
+
+            {/* Face Landmarker Pipeline Status Indicator */}
+            {cameraStatus === 'active' && (
+              <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 bg-neutral-light rounded border border-neutral-border">
+                <span className="text-text-muted">Face Landmarks:</span>
+                {isLandmarkerLoading ? (
+                  <span className="text-amber-600 font-medium">Model loading...</span>
+                ) : landmarkerError ? (
+                  <span className="text-danger-600 font-medium">Model error</span>
+                ) : faceDetected ? (
+                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                    Face detected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 font-medium text-neutral-500">
+                    <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></span>
+                    No face detected
+                  </span>
+                )}
+              </div>
+            )}
 
             <p className="text-[9px] text-text-muted text-center font-sans">
               Webcam stream is processed 100% locally. Raw video is never transmitted.
