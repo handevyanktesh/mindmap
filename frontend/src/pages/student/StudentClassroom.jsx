@@ -40,7 +40,8 @@ export default function StudentClassroom() {
   const {
     isLoading: isLandmarkerLoading,
     error: landmarkerError,
-    faceDetected
+    faceDetected,
+    ear
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -261,22 +262,33 @@ export default function StudentClassroom() {
 
             {/* Face Landmarker Pipeline Status Indicator */}
             {cameraStatus === 'active' && (
-              <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 bg-neutral-light rounded border border-neutral-border">
-                <span className="text-text-muted">Face Landmarks:</span>
-                {isLandmarkerLoading ? (
-                  <span className="text-amber-600 font-medium">Model loading...</span>
-                ) : landmarkerError ? (
-                  <span className="text-danger-600 font-medium">Model error</span>
-                ) : faceDetected ? (
-                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                    Face detected
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 font-medium text-neutral-500">
-                    <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></span>
-                    No face detected
-                  </span>
+              <div className="space-y-1.5 text-[11px] px-2.5 py-2 bg-neutral-light rounded border border-neutral-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-text-muted">Face Landmarks:</span>
+                  {isLandmarkerLoading ? (
+                    <span className="text-amber-600 font-medium">Model loading...</span>
+                  ) : landmarkerError ? (
+                    <span className="text-danger-600 font-medium">Model error</span>
+                  ) : faceDetected ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                      Face detected
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-medium text-neutral-500">
+                      <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></span>
+                      No face detected
+                    </span>
+                  )}
+                </div>
+
+                {faceDetected && (
+                  <div className="flex items-center justify-between pt-1 border-t border-neutral-border/60 text-[10px] text-text-muted">
+                    <span>Local EAR (Eye Aspect Ratio):</span>
+                    <span className="font-mono font-semibold text-brand-navy">
+                      {ear !== null && typeof ear === 'number' ? ear.toFixed(3) : '--'}
+                    </span>
+                  </div>
                 )}
               </div>
             )}

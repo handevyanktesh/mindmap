@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
+import { calculateEAR } from '../features/facial/eyeFeatures'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
@@ -18,12 +19,14 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [error, setError] = useState(null)
   const [faceDetected, setFaceDetected] = useState(false)
   const [landmarks, setLandmarks] = useState(null)
+  const [earData, setEarData] = useState({ leftEAR: null, rightEAR: null, ear: null })
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
   const lastVideoTimeRef = useRef(-1)
   const lastTimestampRef = useRef(0)
   const landmarksRef = useRef(null)
+  const earDataRef = useRef({ leftEAR: null, rightEAR: null, ear: null })
   const lastStateUpdateTimeRef = useRef(0)
 
   // Initialize MediaPipe Face Landmarker once
@@ -112,7 +115,9 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       }
       setFaceDetected(false)
       setLandmarks(null)
+      setEarData({ leftEAR: null, rightEAR: null, ear: null })
       landmarksRef.current = null
+      earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       lastVideoTimeRef.current = -1
       return
     }
@@ -146,18 +151,26 @@ export function useFaceLandmarker(videoRef, enabled = true) {
             const currentLandmarks = hasFace ? results.faceLandmarks[0] : null
             landmarksRef.current = currentLandmarks
 
+            // Compute Eye Aspect Ratio (EAR) from landmarks
+            const currentEAR = hasFace
+              ? calculateEAR(currentLandmarks)
+              : { leftEAR: null, rightEAR: null, ear: null }
+            earDataRef.current = currentEAR
+
             const nowTime = Date.now()
             // Throttle React state updates to avoid unnecessary 60fps re-renders
             // Trigger immediately on detection status transition
             setFaceDetected((prev) => {
               if (prev !== hasFace) {
                 setLandmarks(currentLandmarks)
+                setEarData(currentEAR)
                 lastStateUpdateTimeRef.current = nowTime
                 return hasFace
               }
-              // If detection state is unchanged, throttle landmarks state update to ~10Hz
+              // If detection state is unchanged, throttle state updates to ~10Hz
               if (hasFace && nowTime - lastStateUpdateTimeRef.current > 100) {
                 setLandmarks(currentLandmarks)
+                setEarData(currentEAR)
                 lastStateUpdateTimeRef.current = nowTime
               }
               return prev
@@ -183,7 +196,9 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       }
       setFaceDetected(false)
       setLandmarks(null)
+      setEarData({ leftEAR: null, rightEAR: null, ear: null })
       landmarksRef.current = null
+      earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       lastVideoTimeRef.current = -1
     }
   }, [enabled, isReady, videoRef])
@@ -194,6 +209,10 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     error,
     faceDetected,
     landmarks,
-    landmarksRef
+    landmarksRef,
+    ear: earData.ear,
+    leftEAR: earData.leftEAR,
+    rightEAR: earData.rightEAR,
+    earDataRef
   }
 }
