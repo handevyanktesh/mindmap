@@ -1,10 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import { calculateEAR } from '../features/facial/eyeFeatures'
+import { calculateGaze } from '../features/facial/gazeFeatures'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+
+const INITIAL_GAZE = {
+  leftGazeX: null,
+  rightGazeX: null,
+  gazeX: null,
+  leftGazeY: null,
+  rightGazeY: null,
+  gazeY: null
+}
 
 /**
  * Hook to manage MediaPipe Face Landmarker lifecycle and real-time detection
@@ -20,6 +30,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [faceDetected, setFaceDetected] = useState(false)
   const [landmarks, setLandmarks] = useState(null)
   const [earData, setEarData] = useState({ leftEAR: null, rightEAR: null, ear: null })
+  const [gazeData, setGazeData] = useState(INITIAL_GAZE)
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -27,6 +38,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const lastTimestampRef = useRef(0)
   const landmarksRef = useRef(null)
   const earDataRef = useRef({ leftEAR: null, rightEAR: null, ear: null })
+  const gazeDataRef = useRef(INITIAL_GAZE)
   const lastStateUpdateTimeRef = useRef(0)
 
   // Initialize MediaPipe Face Landmarker once
@@ -116,8 +128,10 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setFaceDetected(false)
       setLandmarks(null)
       setEarData({ leftEAR: null, rightEAR: null, ear: null })
+      setGazeData(INITIAL_GAZE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
+      gazeDataRef.current = INITIAL_GAZE
       lastVideoTimeRef.current = -1
       return
     }
@@ -157,6 +171,12 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               : { leftEAR: null, rightEAR: null, ear: null }
             earDataRef.current = currentEAR
 
+            // Compute Normalized Gaze from landmarks and iris
+            const currentGaze = hasFace
+              ? calculateGaze(currentLandmarks)
+              : INITIAL_GAZE
+            gazeDataRef.current = currentGaze
+
             const nowTime = Date.now()
             // Throttle React state updates to avoid unnecessary 60fps re-renders
             // Trigger immediately on detection status transition
@@ -164,6 +184,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               if (prev !== hasFace) {
                 setLandmarks(currentLandmarks)
                 setEarData(currentEAR)
+                setGazeData(currentGaze)
                 lastStateUpdateTimeRef.current = nowTime
                 return hasFace
               }
@@ -171,6 +192,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               if (hasFace && nowTime - lastStateUpdateTimeRef.current > 100) {
                 setLandmarks(currentLandmarks)
                 setEarData(currentEAR)
+                setGazeData(currentGaze)
                 lastStateUpdateTimeRef.current = nowTime
               }
               return prev
@@ -197,8 +219,10 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setFaceDetected(false)
       setLandmarks(null)
       setEarData({ leftEAR: null, rightEAR: null, ear: null })
+      setGazeData(INITIAL_GAZE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
+      gazeDataRef.current = INITIAL_GAZE
       lastVideoTimeRef.current = -1
     }
   }, [enabled, isReady, videoRef])
@@ -213,6 +237,13 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     ear: earData.ear,
     leftEAR: earData.leftEAR,
     rightEAR: earData.rightEAR,
-    earDataRef
+    earDataRef,
+    gazeX: gazeData.gazeX,
+    gazeY: gazeData.gazeY,
+    leftGazeX: gazeData.leftGazeX,
+    rightGazeX: gazeData.rightGazeX,
+    leftGazeY: gazeData.leftGazeY,
+    rightGazeY: gazeData.rightGazeY,
+    gazeDataRef
   }
 }

@@ -41,7 +41,9 @@ export default function StudentClassroom() {
     isLoading: isLandmarkerLoading,
     error: landmarkerError,
     faceDetected,
-    ear
+    ear,
+    gazeX,
+    gazeY
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -283,12 +285,23 @@ export default function StudentClassroom() {
                 </div>
 
                 {faceDetected && (
-                  <div className="flex items-center justify-between pt-1 border-t border-neutral-border/60 text-[10px] text-text-muted">
-                    <span>Local EAR (Eye Aspect Ratio):</span>
-                    <span className="font-mono font-semibold text-brand-navy">
-                      {ear !== null && typeof ear === 'number' ? ear.toFixed(3) : '--'}
-                    </span>
-                  </div>
+                  <>
+                    <div className="flex items-center justify-between pt-1 border-t border-neutral-border/60 text-[10px] text-text-muted">
+                      <span>Local EAR (Eye Aspect Ratio):</span>
+                      <span className="font-mono font-semibold text-brand-navy">
+                        {ear !== null && typeof ear === 'number' ? ear.toFixed(3) : '--'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-text-muted">
+                      <span>Local Gaze (X / Y):</span>
+                      <span className="font-mono font-semibold text-brand-navy">
+                        {gazeX !== null && typeof gazeX === 'number' ? gazeX.toFixed(2) : '--'}
+                        {' / '}
+                        {gazeY !== null && typeof gazeY === 'number' ? gazeY.toFixed(2) : '--'}
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
             )}
