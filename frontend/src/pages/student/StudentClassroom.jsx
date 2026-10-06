@@ -46,7 +46,8 @@ export default function StudentClassroom() {
     gazeY,
     yaw,
     pitch,
-    roll
+    roll,
+    temporalData
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -314,6 +315,56 @@ export default function StudentClassroom() {
                         {' / '}
                         {roll !== null && typeof roll === 'number' ? `${roll > 0 ? '+' : ''}${roll}°` : '--'}
                       </span>
+                    </div>
+
+                    {/* Windowed Temporal Analysis (5.0s rolling window) */}
+                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
+                        <span>Temporal Window (5.0s):</span>
+                        <span className="font-mono text-brand-navy">
+                          {temporalData?.sampleCount ?? 0} frames ({((temporalData?.windowSpanMs ?? 0) / 1000).toFixed(1)}s)
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>EAR Mean &plusmn; Std:</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {temporalData?.ear?.mean !== null && typeof temporalData?.ear?.mean === 'number'
+                            ? `${temporalData.ear.mean.toFixed(3)} \u00B1 ${temporalData.ear.std?.toFixed(3) ?? '0.000'}`
+                            : '--'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Gaze Mean (X / Y):</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {temporalData?.gaze?.meanX !== null && typeof temporalData?.gaze?.meanX === 'number'
+                            ? `${temporalData.gaze.meanX.toFixed(2)} / ${temporalData.gaze.meanY?.toFixed(2)}`
+                            : '--'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Head Pose Mean (Y/P/R):</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {temporalData?.headPose?.meanYaw !== null && typeof temporalData?.headPose?.meanYaw === 'number'
+                            ? `${temporalData.headPose.meanYaw > 0 ? '+' : ''}${temporalData.headPose.meanYaw.toFixed(1)}° / ${temporalData.headPose.meanPitch > 0 ? '+' : ''}${temporalData.headPose.meanPitch.toFixed(1)}° / ${temporalData.headPose.meanRoll > 0 ? '+' : ''}${temporalData.headPose.meanRoll.toFixed(1)}°`
+                            : '--'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Displacement (Gaze / Pose):</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {temporalData?.gaze?.displacement !== null && typeof temporalData?.gaze?.displacement === 'number'
+                            ? temporalData.gaze.displacement.toFixed(2)
+                            : '--'}
+                          {' / '}
+                          {temporalData?.headPose?.angularDisplacement !== null && typeof temporalData?.headPose?.angularDisplacement === 'number'
+                            ? `${temporalData.headPose.angularDisplacement.toFixed(1)}°`
+                            : '--'}
+                        </span>
+                      </div>
                     </div>
                   </>
                 )}

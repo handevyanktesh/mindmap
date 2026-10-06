@@ -3,6 +3,8 @@ import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import { calculateEAR } from '../features/facial/eyeFeatures'
 import { calculateGaze } from '../features/facial/gazeFeatures'
 import { calculateHeadPose } from '../features/facial/headPoseFeatures'
+import { TemporalBuffer } from '../features/temporal/temporalBuffer'
+import { extractTemporalFeatures } from '../features/temporal/temporalFeatures'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
@@ -23,6 +25,8 @@ const INITIAL_HEAD_POSE = {
   roll: null
 }
 
+const INITIAL_TEMPORAL = extractTemporalFeatures([])
+
 /**
  * Hook to manage MediaPipe Face Landmarker lifecycle and real-time detection
  * on an active HTML <video> element.
@@ -39,6 +43,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [earData, setEarData] = useState({ leftEAR: null, rightEAR: null, ear: null })
   const [gazeData, setGazeData] = useState(INITIAL_GAZE)
   const [headPoseData, setHeadPoseData] = useState(INITIAL_HEAD_POSE)
+  const [temporalData, setTemporalData] = useState(INITIAL_TEMPORAL)
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -48,6 +53,8 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const earDataRef = useRef({ leftEAR: null, rightEAR: null, ear: null })
   const gazeDataRef = useRef(INITIAL_GAZE)
   const headPoseDataRef = useRef(INITIAL_HEAD_POSE)
+  const temporalBufferRef = useRef(new TemporalBuffer(5000, 600))
+  const lastFaceDetectedRef = useRef(false)
   const lastStateUpdateTimeRef = useRef(0)
 
   // Initialize MediaPipe Face Landmarker once
@@ -139,10 +146,13 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setEarData({ leftEAR: null, rightEAR: null, ear: null })
       setGazeData(INITIAL_GAZE)
       setHeadPoseData(INITIAL_HEAD_POSE)
+      setTemporalData(INITIAL_TEMPORAL)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
       headPoseDataRef.current = INITIAL_HEAD_POSE
+      temporalBufferRef.current.clear()
+      lastFaceDetectedRef.current = false
       lastVideoTimeRef.current = -1
       return
     }
@@ -195,27 +205,32 @@ export function useFaceLandmarker(videoRef, enabled = true) {
             headPoseDataRef.current = currentPose
 
             const nowTime = Date.now()
-            // Throttle React state updates to avoid unnecessary 60fps re-renders
-            // Trigger immediately on detection status transition
-            setFaceDetected((prev) => {
-              if (prev !== hasFace) {
-                setLandmarks(currentLandmarks)
-                setEarData(currentEAR)
-                setGazeData(currentGaze)
-                setHeadPoseData(currentPose)
-                lastStateUpdateTimeRef.current = nowTime
-                return hasFace
-              }
-              // If detection state is unchanged, throttle state updates to ~10Hz
-              if (hasFace && nowTime - lastStateUpdateTimeRef.current > 100) {
-                setLandmarks(currentLandmarks)
-                setEarData(currentEAR)
-                setGazeData(currentGaze)
-                setHeadPoseData(currentPose)
-                lastStateUpdateTimeRef.current = nowTime
-              }
-              return prev
+
+            // Append current frame's features (or nulls if face absent) to rolling buffer
+            temporalBufferRef.current.addSample({
+              timestamp: nowTime,
+              ear: currentEAR.ear,
+              gazeX: currentGaze.gazeX,
+              gazeY: currentGaze.gazeY,
+              yaw: currentPose.yaw,
+              pitch: currentPose.pitch,
+              roll: currentPose.roll
             })
+
+            // Throttle React state updates to avoid unnecessary 60fps re-renders (~10Hz)
+            const isTransition = lastFaceDetectedRef.current !== hasFace
+            const isThrottledTick = nowTime - lastStateUpdateTimeRef.current > 100
+
+            if (isTransition || isThrottledTick) {
+              lastFaceDetectedRef.current = hasFace
+              lastStateUpdateTimeRef.current = nowTime
+              setFaceDetected(hasFace)
+              setLandmarks(currentLandmarks)
+              setEarData(currentEAR)
+              setGazeData(currentGaze)
+              setHeadPoseData(currentPose)
+              setTemporalData(extractTemporalFeatures(temporalBufferRef.current))
+            }
           } catch (err) {
             console.warn('FaceLandmarker detectForVideo error:', err)
           }
@@ -240,10 +255,13 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setEarData({ leftEAR: null, rightEAR: null, ear: null })
       setGazeData(INITIAL_GAZE)
       setHeadPoseData(INITIAL_HEAD_POSE)
+      setTemporalData(INITIAL_TEMPORAL)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
       headPoseDataRef.current = INITIAL_HEAD_POSE
+      temporalBufferRef.current.clear()
+      lastFaceDetectedRef.current = false
       lastVideoTimeRef.current = -1
     }
   }, [enabled, isReady, videoRef])
@@ -269,6 +287,8 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     yaw: headPoseData.yaw,
     pitch: headPoseData.pitch,
     roll: headPoseData.roll,
-    headPoseDataRef
+    headPoseDataRef,
+    temporalData,
+    temporalBufferRef
   }
 }
