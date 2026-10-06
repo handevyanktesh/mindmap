@@ -47,7 +47,8 @@ export default function StudentClassroom() {
     yaw,
     pitch,
     roll,
-    temporalData
+    temporalData,
+    fusedData
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -362,6 +363,53 @@ export default function StudentClassroom() {
                           {' / '}
                           {temporalData?.headPose?.angularDisplacement !== null && typeof temporalData?.headPose?.angularDisplacement === 'number'
                             ? `${temporalData.headPose.angularDisplacement.toFixed(1)}°`
+                            : '--'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Multimodal Signal Fusion (Quality-Gated Bounded Representation) */}
+                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
+                        <span>Multimodal Signal:</span>
+                        <span className="font-mono text-brand-navy">
+                          {fusedData?.valid ? (
+                            <span className="text-emerald-600 font-semibold">Valid</span>
+                          ) : (
+                            <span className="text-neutral-500">Unavailable</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Modality Coverage:</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {fusedData?.modalityCoverage?.availableCount ?? 0} / {fusedData?.modalityCoverage?.totalCount ?? 3}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Fusion Output:</span>
+                        <span className="font-mono font-semibold text-brand-navy">
+                          {fusedData?.fusedSignal !== null && typeof fusedData?.fusedSignal === 'number'
+                            ? fusedData.fusedSignal.toFixed(3)
+                            : '--'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Contributions (E / G / P):</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {fusedData?.contributions?.ear !== null && typeof fusedData?.contributions?.ear === 'number'
+                            ? fusedData.contributions.ear.toFixed(2)
+                            : '--'}
+                          {' / '}
+                          {fusedData?.contributions?.gaze !== null && typeof fusedData?.contributions?.gaze === 'number'
+                            ? fusedData.contributions.gaze.toFixed(2)
+                            : '--'}
+                          {' / '}
+                          {fusedData?.contributions?.headPose !== null && typeof fusedData?.contributions?.headPose === 'number'
+                            ? fusedData.contributions.headPose.toFixed(2)
                             : '--'}
                         </span>
                       </div>

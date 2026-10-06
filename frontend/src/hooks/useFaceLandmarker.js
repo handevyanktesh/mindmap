@@ -5,6 +5,7 @@ import { calculateGaze } from '../features/facial/gazeFeatures'
 import { calculateHeadPose } from '../features/facial/headPoseFeatures'
 import { TemporalBuffer } from '../features/temporal/temporalBuffer'
 import { extractTemporalFeatures } from '../features/temporal/temporalFeatures'
+import { fuseMultimodalFeatures } from '../features/fusion/fusionFeatures'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
@@ -26,6 +27,7 @@ const INITIAL_HEAD_POSE = {
 }
 
 const INITIAL_TEMPORAL = extractTemporalFeatures([])
+const INITIAL_FUSED = fuseMultimodalFeatures(null)
 
 /**
  * Hook to manage MediaPipe Face Landmarker lifecycle and real-time detection
@@ -44,6 +46,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [gazeData, setGazeData] = useState(INITIAL_GAZE)
   const [headPoseData, setHeadPoseData] = useState(INITIAL_HEAD_POSE)
   const [temporalData, setTemporalData] = useState(INITIAL_TEMPORAL)
+  const [fusedData, setFusedData] = useState(INITIAL_FUSED)
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -147,6 +150,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setGazeData(INITIAL_GAZE)
       setHeadPoseData(INITIAL_HEAD_POSE)
       setTemporalData(INITIAL_TEMPORAL)
+      setFusedData(INITIAL_FUSED)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
@@ -229,7 +233,10 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               setEarData(currentEAR)
               setGazeData(currentGaze)
               setHeadPoseData(currentPose)
-              setTemporalData(extractTemporalFeatures(temporalBufferRef.current))
+              const currentTemporal = extractTemporalFeatures(temporalBufferRef.current)
+              const currentFused = fuseMultimodalFeatures(currentTemporal)
+              setTemporalData(currentTemporal)
+              setFusedData(currentFused)
             }
           } catch (err) {
             console.warn('FaceLandmarker detectForVideo error:', err)
@@ -256,6 +263,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setGazeData(INITIAL_GAZE)
       setHeadPoseData(INITIAL_HEAD_POSE)
       setTemporalData(INITIAL_TEMPORAL)
+      setFusedData(INITIAL_FUSED)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
@@ -289,6 +297,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     roll: headPoseData.roll,
     headPoseDataRef,
     temporalData,
-    temporalBufferRef
+    temporalBufferRef,
+    fusedData
   }
 }
