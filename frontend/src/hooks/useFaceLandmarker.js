@@ -6,6 +6,7 @@ import { calculateHeadPose } from '../features/facial/headPoseFeatures'
 import { TemporalBuffer } from '../features/temporal/temporalBuffer'
 import { extractTemporalFeatures } from '../features/temporal/temporalFeatures'
 import { fuseMultimodalFeatures } from '../features/fusion/fusionFeatures'
+import { BaselineTracker } from '../features/baseline/baselineTracker'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
@@ -28,6 +29,8 @@ const INITIAL_HEAD_POSE = {
 
 const INITIAL_TEMPORAL = extractTemporalFeatures([])
 const INITIAL_FUSED = fuseMultimodalFeatures(null)
+const initialBaselineTracker = new BaselineTracker()
+const INITIAL_BASELINE = initialBaselineTracker.getState()
 
 /**
  * Hook to manage MediaPipe Face Landmarker lifecycle and real-time detection
@@ -47,6 +50,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [headPoseData, setHeadPoseData] = useState(INITIAL_HEAD_POSE)
   const [temporalData, setTemporalData] = useState(INITIAL_TEMPORAL)
   const [fusedData, setFusedData] = useState(INITIAL_FUSED)
+  const [baselineData, setBaselineData] = useState(INITIAL_BASELINE)
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -57,6 +61,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const gazeDataRef = useRef(INITIAL_GAZE)
   const headPoseDataRef = useRef(INITIAL_HEAD_POSE)
   const temporalBufferRef = useRef(new TemporalBuffer(5000, 600))
+  const baselineTrackerRef = useRef(new BaselineTracker())
   const lastFaceDetectedRef = useRef(false)
   const lastStateUpdateTimeRef = useRef(0)
 
@@ -151,11 +156,13 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setHeadPoseData(INITIAL_HEAD_POSE)
       setTemporalData(INITIAL_TEMPORAL)
       setFusedData(INITIAL_FUSED)
+      setBaselineData(INITIAL_BASELINE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
       headPoseDataRef.current = INITIAL_HEAD_POSE
       temporalBufferRef.current.clear()
+      baselineTrackerRef.current.reset()
       lastFaceDetectedRef.current = false
       lastVideoTimeRef.current = -1
       return
@@ -235,8 +242,10 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               setHeadPoseData(currentPose)
               const currentTemporal = extractTemporalFeatures(temporalBufferRef.current)
               const currentFused = fuseMultimodalFeatures(currentTemporal)
+              const currentBaseline = baselineTrackerRef.current.update(currentTemporal)
               setTemporalData(currentTemporal)
               setFusedData(currentFused)
+              setBaselineData(currentBaseline)
             }
           } catch (err) {
             console.warn('FaceLandmarker detectForVideo error:', err)
@@ -264,11 +273,13 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setHeadPoseData(INITIAL_HEAD_POSE)
       setTemporalData(INITIAL_TEMPORAL)
       setFusedData(INITIAL_FUSED)
+      setBaselineData(INITIAL_BASELINE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
       headPoseDataRef.current = INITIAL_HEAD_POSE
       temporalBufferRef.current.clear()
+      baselineTrackerRef.current.reset()
       lastFaceDetectedRef.current = false
       lastVideoTimeRef.current = -1
     }
@@ -298,6 +309,8 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     headPoseDataRef,
     temporalData,
     temporalBufferRef,
-    fusedData
+    fusedData,
+    baselineData,
+    baselineTrackerRef
   }
 }

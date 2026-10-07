@@ -48,7 +48,8 @@ export default function StudentClassroom() {
     pitch,
     roll,
     temporalData,
-    fusedData
+    fusedData,
+    baselineData
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -411,6 +412,56 @@ export default function StudentClassroom() {
                           {fusedData?.contributions?.headPose !== null && typeof fusedData?.contributions?.headPose === 'number'
                             ? fusedData.contributions.headPose.toFixed(2)
                             : '--'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Personal Behavioural Baseline (Quality-Gated Reference) */}
+                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
+                        <span>Personal Baseline:</span>
+                        <span className="font-mono text-brand-navy">
+                          {baselineData?.ready ? (
+                            <span className="text-emerald-600 font-semibold">Ready</span>
+                          ) : (
+                            <span className="text-amber-600 font-medium">
+                              Calibrating ({baselineData?.warmupProgress?.current ?? 0}/{baselineData?.warmupProgress?.target ?? 30})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Baseline Ref (E / G / P):</span>
+                        <span className="font-mono font-medium text-brand-navy">
+                          {baselineData?.baseline?.ear?.value !== null && typeof baselineData?.baseline?.ear?.value === 'number'
+                            ? baselineData.baseline.ear.value.toFixed(2)
+                            : '--'}
+                          {' / '}
+                          {baselineData?.baseline?.gaze?.x !== null && typeof baselineData?.baseline?.gaze?.x === 'number'
+                            ? `${baselineData.baseline.gaze.x.toFixed(2)},${baselineData.baseline.gaze.y.toFixed(2)}`
+                            : '--'}
+                          {' / '}
+                          {baselineData?.baseline?.headPose?.yaw !== null && typeof baselineData?.baseline?.headPose?.yaw === 'number'
+                            ? `${baselineData.baseline.headPose.yaw.toFixed(0)}°`
+                            : '--'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Behavioural Deviation:</span>
+                        <span className="font-mono font-semibold text-brand-navy">
+                          {baselineData?.ready ? (
+                            <>
+                              EAR: {baselineData?.deviation?.ear !== null && typeof baselineData?.deviation?.ear === 'number' ? baselineData.deviation.ear.toFixed(3) : '--'}
+                              {' | '}
+                              Gaze: {baselineData?.deviation?.gaze !== null && typeof baselineData?.deviation?.gaze === 'number' ? baselineData.deviation.gaze.toFixed(2) : '--'}
+                              {' | '}
+                              Pose: {baselineData?.deviation?.headPose !== null && typeof baselineData?.deviation?.headPose === 'number' ? `${baselineData.deviation.headPose.toFixed(1)}°` : '--'}
+                            </>
+                          ) : (
+                            <span className="text-text-muted font-normal">Pending calibration</span>
+                          )}
                         </span>
                       </div>
                     </div>
