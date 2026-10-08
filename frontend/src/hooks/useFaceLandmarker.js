@@ -7,6 +7,7 @@ import { TemporalBuffer } from '../features/temporal/temporalBuffer'
 import { extractTemporalFeatures } from '../features/temporal/temporalFeatures'
 import { fuseMultimodalFeatures } from '../features/fusion/fusionFeatures'
 import { BaselineTracker } from '../features/baseline/baselineTracker'
+import { InferenceStateMachine } from '../features/inference/inferenceStateMachine'
 
 const WASM_CDN_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const MODEL_ASSET_URL =
@@ -31,6 +32,8 @@ const INITIAL_TEMPORAL = extractTemporalFeatures([])
 const INITIAL_FUSED = fuseMultimodalFeatures(null)
 const initialBaselineTracker = new BaselineTracker()
 const INITIAL_BASELINE = initialBaselineTracker.getState()
+const initialInferenceSM = new InferenceStateMachine()
+const INITIAL_INFERENCE = initialInferenceSM.getState()
 
 /**
  * Hook to manage MediaPipe Face Landmarker lifecycle and real-time detection
@@ -51,6 +54,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const [temporalData, setTemporalData] = useState(INITIAL_TEMPORAL)
   const [fusedData, setFusedData] = useState(INITIAL_FUSED)
   const [baselineData, setBaselineData] = useState(INITIAL_BASELINE)
+  const [inferenceData, setInferenceData] = useState(INITIAL_INFERENCE)
 
   const landmarkerRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -62,6 +66,7 @@ export function useFaceLandmarker(videoRef, enabled = true) {
   const headPoseDataRef = useRef(INITIAL_HEAD_POSE)
   const temporalBufferRef = useRef(new TemporalBuffer(5000, 600))
   const baselineTrackerRef = useRef(new BaselineTracker())
+  const inferenceSMRef = useRef(new InferenceStateMachine())
   const lastFaceDetectedRef = useRef(false)
   const lastStateUpdateTimeRef = useRef(0)
 
@@ -157,12 +162,14 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setTemporalData(INITIAL_TEMPORAL)
       setFusedData(INITIAL_FUSED)
       setBaselineData(INITIAL_BASELINE)
+      setInferenceData(INITIAL_INFERENCE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
       headPoseDataRef.current = INITIAL_HEAD_POSE
       temporalBufferRef.current.clear()
       baselineTrackerRef.current.reset()
+      inferenceSMRef.current.reset()
       lastFaceDetectedRef.current = false
       lastVideoTimeRef.current = -1
       return
@@ -243,9 +250,24 @@ export function useFaceLandmarker(videoRef, enabled = true) {
               const currentTemporal = extractTemporalFeatures(temporalBufferRef.current)
               const currentFused = fuseMultimodalFeatures(currentTemporal)
               const currentBaseline = baselineTrackerRef.current.update(currentTemporal)
+
+              // Compute maximum relevant sustained deviation duration across modalities
+              const sustainedClosure = currentTemporal?.ear?.sustainedClosureDurationMs || 0
+              const sustainedGazeDev = currentTemporal?.gaze?.sustainedDeviationDurationMs || 0
+              const sustainedPoseTurn = currentTemporal?.headPose?.sustainedTurnDurationMs || 0
+              const maxSustainedDuration = Math.max(sustainedClosure, sustainedGazeDev, sustainedPoseTurn)
+
+              const currentInference = inferenceSMRef.current.update({
+                deviations: currentBaseline?.deviation,
+                baselineReady: currentBaseline?.ready,
+                temporalData: currentTemporal,
+                sustainedDurationMs: maxSustainedDuration
+              })
+
               setTemporalData(currentTemporal)
               setFusedData(currentFused)
               setBaselineData(currentBaseline)
+              setInferenceData(currentInference)
             }
           } catch (err) {
             console.warn('FaceLandmarker detectForVideo error:', err)
@@ -274,12 +296,14 @@ export function useFaceLandmarker(videoRef, enabled = true) {
       setTemporalData(INITIAL_TEMPORAL)
       setFusedData(INITIAL_FUSED)
       setBaselineData(INITIAL_BASELINE)
+      setInferenceData(INITIAL_INFERENCE)
       landmarksRef.current = null
       earDataRef.current = { leftEAR: null, rightEAR: null, ear: null }
       gazeDataRef.current = INITIAL_GAZE
       headPoseDataRef.current = INITIAL_HEAD_POSE
       temporalBufferRef.current.clear()
       baselineTrackerRef.current.reset()
+      inferenceSMRef.current.reset()
       lastFaceDetectedRef.current = false
       lastVideoTimeRef.current = -1
     }
@@ -311,6 +335,8 @@ export function useFaceLandmarker(videoRef, enabled = true) {
     temporalBufferRef,
     fusedData,
     baselineData,
-    baselineTrackerRef
+    baselineTrackerRef,
+    inferenceData,
+    inferenceSMRef
   }
 }

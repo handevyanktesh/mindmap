@@ -49,7 +49,8 @@ export default function StudentClassroom() {
     roll,
     temporalData,
     fusedData,
-    baselineData
+    baselineData,
+    inferenceData
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
 
   const classroomName = location.state?.classroomName
@@ -464,6 +465,60 @@ export default function StudentClassroom() {
                           )}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Behavioural Assessment (Interpretable Inference) */}
+                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
+                        <span>Behavioural Assessment:</span>
+                        <span className="font-mono text-brand-navy text-[10px]">
+                          {inferenceData?.quality?.rating || 'Limited'} Evidence
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Engagement-related:</span>
+                        <span className="font-mono font-semibold text-brand-navy">
+                          {inferenceData?.engagement?.state === 'NORMAL_BEHAVIOUR' && (
+                            <span className="text-emerald-600">Normal behaviour</span>
+                          )}
+                          {inferenceData?.engagement?.state === 'REDUCED_ENGAGEMENT_LIKE' && (
+                            <span className="text-amber-600">Reduced-engagement-like</span>
+                          )}
+                          {inferenceData?.engagement?.state === 'UNCERTAIN' && (
+                            <span className="text-neutral-500">Uncertain</span>
+                          )}
+                          {inferenceData?.engagement?.confidence !== null && typeof inferenceData?.engagement?.confidence === 'number' ? (
+                            <span className="text-[9px] font-normal text-text-muted ml-1">
+                              (conf: {inferenceData.engagement.confidence.toFixed(2)})
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-text-muted">
+                        <span>Confusion-related signal:</span>
+                        <span className="font-mono font-semibold text-brand-navy">
+                          {inferenceData?.confusion?.state === 'LOW' && (
+                            <span className="text-brand-navy">Low</span>
+                          )}
+                          {inferenceData?.confusion?.state === 'ELEVATED' && (
+                            <span className="text-amber-600">Elevated</span>
+                          )}
+                          {inferenceData?.confusion?.state === 'UNCERTAIN' && (
+                            <span className="text-neutral-500">Uncertain</span>
+                          )}
+                          {inferenceData?.confusion?.confidence !== null && typeof inferenceData?.confusion?.confidence === 'number' ? (
+                            <span className="text-[9px] font-normal text-text-muted ml-1">
+                              (conf: {inferenceData.confusion.confidence.toFixed(2)})
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+
+                      <p className="text-[8.5px] text-text-muted/80 pt-0.5 leading-tight italic">
+                        Observable facial behavioural signals only; not a direct measure of internal mental state.
+                      </p>
                     </div>
                   </>
                 )}
