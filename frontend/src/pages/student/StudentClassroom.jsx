@@ -6,6 +6,7 @@ import StatusBadge from '../../components/StatusBadge'
 import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 import { useCamera } from '../../hooks/useCamera'
 import { useFaceLandmarker } from '../../hooks/useFaceLandmarker'
+import { API_BASE_URL } from '../../config/api'
 
 export default function StudentClassroom() {
   const { id } = useParams()
@@ -22,7 +23,7 @@ export default function StudentClassroom() {
   const isJoined = participation !== null && participation.status === 'joined'
 
   // Real-time WebSocket connection
-  const { isConnected: isWsConnected, lastMessage, sendBehaviourUpdate } = useSessionWebSocket(
+  const { isConnected: isWsConnected, connectionState, retryCount, lastMessage, sendBehaviourUpdate } = useSessionWebSocket(
     id,
     token,
     isJoined && !sessionEnded
@@ -72,7 +73,7 @@ export default function StudentClassroom() {
         }
 
         // Attempt to join the session
-        const res = await fetch(`http://localhost:8000/api/sessions/${id}/join`, {
+        const res = await fetch(`${API_BASE_URL}/api/sessions/${id}/join`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -92,7 +93,7 @@ export default function StudentClassroom() {
           const errData = await res.json()
           // If already joined, retrieve current participation record
           if (res.status === 400 && errData.detail && errData.detail.includes('already')) {
-            const partRes = await fetch(`http://localhost:8000/api/sessions/${id}/participation`, {
+            const partRes = await fetch(`${API_BASE_URL}/api/sessions/${id}/participation`, {
               headers: { Authorization: `Bearer ${token}` }
             })
             if (partRes.ok) {
@@ -165,7 +166,7 @@ export default function StudentClassroom() {
     setLeaving(true)
     try {
       const token = localStorage.getItem('token')
-      await fetch(`http://localhost:8000/api/sessions/${id}/leave`, {
+      await fetch(`${API_BASE_URL}/api/sessions/${id}/leave`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -225,7 +226,9 @@ export default function StudentClassroom() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm">
         <div className="flex items-center gap-3">
           <StatusBadge status="success" label="Active Participant" />
-          {isWsConnected && <StatusBadge status="info" label="Realtime Sync" />}
+          {connectionState === 'connected' && <StatusBadge status="info" label="Realtime Sync" />}
+          {connectionState === 'reconnecting' && <StatusBadge status="warning" label={`Reconnecting (${retryCount}/5)...`} />}
+          {connectionState === 'failed' && <StatusBadge status="danger" label="Sync Offline" />}
           <div>
             <h2 className="font-bold text-brand-navy text-base">{courseTitle}</h2>
             <p className="text-[10px] text-text-muted">

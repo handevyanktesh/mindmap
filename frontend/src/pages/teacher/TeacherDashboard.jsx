@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
+import { API_BASE_URL } from '../../config/api'
 
 export default function TeacherDashboard() {
   const [activeClassrooms, setActiveClassrooms] = useState([])
@@ -16,7 +17,7 @@ export default function TeacherDashboard() {
   const fetchClassrooms = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:8000/api/classrooms/', {
+      const response = await fetch(`${API_BASE_URL}/api/classrooms/`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!response.ok) {

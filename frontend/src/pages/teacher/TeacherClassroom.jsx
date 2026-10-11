@@ -6,6 +6,7 @@ import Input from '../../components/Input'
 import StatusBadge from '../../components/StatusBadge'
 import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 import { calculateClassroomAggregation, isStudentReporting } from '../../features/classroom/classroomAggregation'
+import { API_BASE_URL } from '../../config/api'
 
 export default function TeacherClassroom() {
   const { id } = useParams()
@@ -34,7 +35,7 @@ export default function TeacherClassroom() {
       }
 
       // 1. Fetch classroom
-      const classRes = await fetch(`http://localhost:8000/api/classrooms/${id}`, {
+      const classRes = await fetch(`${API_BASE_URL}/api/classrooms/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       
@@ -53,7 +54,7 @@ export default function TeacherClassroom() {
       setClassroom(classData)
 
       // 2. Fetch sessions
-      const sessRes = await fetch(`http://localhost:8000/api/classrooms/${id}/sessions`, {
+      const sessRes = await fetch(`${API_BASE_URL}/api/classrooms/${id}/sessions`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (sessRes.ok) {
@@ -63,7 +64,7 @@ export default function TeacherClassroom() {
         // 3. Fetch participants for the active or latest session
         const curr = sessData.find((s) => s.status === 'active') || sessData.find((s) => s.status === 'scheduled') || sessData[0]
         if (curr) {
-          const partRes = await fetch(`http://localhost:8000/api/sessions/${curr.id}/participants`, {
+          const partRes = await fetch(`${API_BASE_URL}/api/sessions/${curr.id}/participants`, {
             headers: { Authorization: `Bearer ${token}` }
           })
           if (partRes.ok) {
@@ -112,7 +113,7 @@ export default function TeacherClassroom() {
         scheduled_at: newScheduledAt ? new Date(newScheduledAt).toISOString() : null
       }
 
-      const res = await fetch('http://localhost:8000/api/sessions/', {
+      const res = await fetch(`${API_BASE_URL}/api/sessions/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +149,7 @@ export default function TeacherClassroom() {
     setActionLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://localhost:8000/api/sessions/${sessionId}/start`, {
+      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/start`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -176,7 +177,7 @@ export default function TeacherClassroom() {
     setActionLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://localhost:8000/api/sessions/${sessionId}/end`, {
+      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/end`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       })
@@ -211,7 +212,7 @@ export default function TeacherClassroom() {
 
   const token = localStorage.getItem('token')
   const isWsActive = Boolean(activeSession && activeSession.status === 'active')
-  const { isConnected: isWsConnected, lastMessage } = useSessionWebSocket(
+  const { connectionState, retryCount, lastMessage } = useSessionWebSocket(
     activeSession?.id,
     token,
     isWsActive
@@ -492,8 +493,24 @@ export default function TeacherClassroom() {
           </p>
         </div>
         <div className="text-[10px] font-mono text-text-muted flex items-center gap-1.5 self-end sm:self-auto">
-          <span className={`inline-block w-2 h-2 rounded-full ${isWsConnected ? 'bg-success-500' : 'bg-neutral-border'}`} />
-          <span>{isWsConnected ? 'WebSocket Live' : 'WebSocket Standby'}</span>
+          <span className={`inline-block w-2 h-2 rounded-full ${
+            connectionState === 'connected'
+              ? 'bg-success-500'
+              : connectionState === 'reconnecting'
+                ? 'bg-warning-500 animate-pulse'
+                : connectionState === 'failed'
+                  ? 'bg-danger-500'
+                  : 'bg-neutral-border'
+          }`} />
+          <span>{
+            connectionState === 'connected'
+              ? 'WebSocket Live'
+              : connectionState === 'reconnecting'
+                ? `Reconnecting (${retryCount}/5)...`
+                : connectionState === 'failed'
+                  ? 'Connection Offline'
+                  : 'WebSocket Standby'
+          }</span>
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Input from '../../components/Input'
 import Button from '../../components/Button'
+import { API_BASE_URL } from '../../config/api'
 
 export default function CreateClassroom() {
   const navigate = useNavigate()
@@ -21,7 +22,7 @@ export default function CreateClassroom() {
     setError('')
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8000/api/classrooms/', {
+      const response = await fetch(`${API_BASE_URL}/api/classrooms/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

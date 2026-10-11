@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Input from '../../components/Input'
 import Button from '../../components/Button'
+import { API_BASE_URL } from '../../config/api'
 
 export default function JoinClassroom() {
   const navigate = useNavigate()
@@ -24,7 +25,7 @@ export default function JoinClassroom() {
 
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://localhost:8000/api/classrooms/code/${cleanCode}/active-session`, {
+      const res = await fetch(`${API_BASE_URL}/api/classrooms/code/${cleanCode}/active-session`, {
         headers: { Authorization: `Bearer ${token}` }
       })
 
