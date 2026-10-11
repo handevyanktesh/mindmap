@@ -21,6 +21,7 @@ import StudentClassroom from './pages/student/StudentClassroom'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import CreateClassroom from './pages/teacher/CreateClassroom'
 import TeacherClassroom from './pages/teacher/TeacherClassroom'
+import SessionReport from './pages/teacher/SessionReport'
 
 // Route Protection Wrapper
 const ProtectedRoute = ({ children, allowedRole }) => {
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="/teacher" element={<ProtectedRoute allowedRole="teacher"><TeacherDashboard /></ProtectedRoute>} />
             <Route path="/teacher/create" element={<ProtectedRoute allowedRole="teacher"><CreateClassroom /></ProtectedRoute>} />
             <Route path="/teacher/classroom/:id" element={<ProtectedRoute allowedRole="teacher"><TeacherClassroom /></ProtectedRoute>} />
+            <Route path="/teacher/session/:sessionId/report" element={<ProtectedRoute allowedRole="teacher"><SessionReport /></ProtectedRoute>} />
           </Route>
 
           {/* Fallback route - redirect to landing */}

@@ -1,13 +1,14 @@
 from typing import List
 from fastapi import APIRouter, Depends
 from app.api.deps import get_db, require_teacher, require_student
-from app.schemas.session import SessionCreate, SessionResponse
+from app.schemas.session import SessionCreate, SessionResponse, SessionSummaryResponse
 from app.schemas.participant import ParticipantResponse, ParticipantDetailResponse
 from app.services.session_service import (
     create_session,
     get_session,
     start_session,
-    end_session
+    end_session,
+    get_session_summary
 )
 from app.services.participant_service import (
     join_session,
@@ -55,6 +56,14 @@ async def end(
         "session_id": session_id
     })
     return result
+
+@router.get("/{session_id}/summary", response_model=SessionSummaryResponse)
+def summary(
+    session_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return get_session_summary(db, session_id, current_user["id"])
 
 # --- Student Participation Routes ---
 

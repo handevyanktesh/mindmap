@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -19,6 +19,21 @@ export default function TeacherClassroom() {
   const [error, setError] = useState('')
   const [sessionError, setSessionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [concludedSession, setConcludedSession] = useState(null)
+
+  // In-memory session telemetry accumulation
+  const telemetryTimelineRef = useRef([])
+  const telemetryCountsRef = useRef({
+    total_observations: 0,
+    normal_count: 0,
+    reduced_count: 0,
+    uncertain_engagement_count: 0,
+    low_confusion_count: 0,
+    elevated_confusion_count: 0,
+    uncertain_confusion_count: 0,
+    confidence_sum: 0,
+    confidence_count: 0
+  })
 
   // Create session form state
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -176,6 +191,19 @@ export default function TeacherClassroom() {
     setSessionError('')
     setActionLoading(true)
     try {
+      // Seal in-memory telemetry summary into sessionStorage for immediate report access
+      const sealedSummary = {
+        session_id: sessionId,
+        ended_at_ms: Date.now(),
+        counts: { ...telemetryCountsRef.current },
+        timeline: [...telemetryTimelineRef.current]
+      }
+      try {
+        sessionStorage.setItem(`mindmap_session_summary_${sessionId}`, JSON.stringify(sealedSummary))
+      } catch (_) {
+        // Non-blocking storage
+      }
+
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/end`, {
         method: 'POST',
@@ -192,6 +220,8 @@ export default function TeacherClassroom() {
         throw new Error(errData.detail || 'Failed to end session')
       }
 
+      const endedData = await res.json()
+      setConcludedSession(endedData)
       await fetchClassroomAndSessions()
     } catch (err) {
       setSessionError(err.message || 'Error ending session')
@@ -237,6 +267,21 @@ export default function TeacherClassroom() {
           }
         }))
 
+        // Accumulate in-memory session counts for summary report
+        if (data.engagement_state === 'NORMAL_BEHAVIOUR') telemetryCountsRef.current.normal_count++
+        else if (data.engagement_state === 'REDUCED_ENGAGEMENT_LIKE') telemetryCountsRef.current.reduced_count++
+        else telemetryCountsRef.current.uncertain_engagement_count++
+
+        if (data.confusion_signal === 'LOW') telemetryCountsRef.current.low_confusion_count++
+        else if (data.confusion_signal === 'ELEVATED') telemetryCountsRef.current.elevated_confusion_count++
+        else telemetryCountsRef.current.uncertain_confusion_count++
+
+        telemetryCountsRef.current.total_observations++
+        if (typeof data.confidence === 'number') {
+          telemetryCountsRef.current.confidence_sum += data.confidence
+          telemetryCountsRef.current.confidence_count++
+        }
+
         // F-01 & F-03: Reconcile and synchronize the participant roster dynamically
         setParticipants((prev) => {
           const index = prev.findIndex((p) => p.student_id === studentId)
@@ -279,13 +324,30 @@ export default function TeacherClassroom() {
     }
   }, [activeSession])
 
-  // Periodic ticker to re-evaluate student staleness (>10s)
+  // Periodic ticker to re-evaluate student staleness (>10s) and capture timeline trajectory
   useEffect(() => {
     const timer = setInterval(() => {
-      setNowMs(Date.now())
-    }, 2000)
+      const currentNow = Date.now()
+      setNowMs(currentNow)
+
+      if (activeSession && activeSession.status === 'active') {
+        const reporting = Object.values(liveTelemetry).filter((r) => currentNow - r.received_at_ms <= 10000)
+        if (reporting.length > 0) {
+          const normalCnt = reporting.filter((r) => r.engagement_state === 'NORMAL_BEHAVIOUR').length
+          const reducedCnt = reporting.filter((r) => r.engagement_state === 'REDUCED_ENGAGEMENT_LIKE').length
+          const confusionCnt = reporting.filter((r) => r.confusion_signal === 'ELEVATED').length
+          telemetryTimelineRef.current.push({
+            timestamp_ms: currentNow,
+            normal_pct: Math.round((normalCnt / reporting.length) * 1000) / 10,
+            reduced_pct: Math.round((reducedCnt / reporting.length) * 1000) / 10,
+            elevated_confusion_pct: Math.round((confusionCnt / reporting.length) * 1000) / 10,
+            reporting_count: reporting.length
+          })
+        }
+      }
+    }, 3000)
     return () => clearInterval(timer)
-  }, [])
+  }, [activeSession, liveTelemetry])
 
   // Calculate live classroom aggregation
   const aggregation = calculateClassroomAggregation(liveTelemetry, nowMs)
@@ -304,6 +366,37 @@ export default function TeacherClassroom() {
         <div className="p-3 bg-danger-50 border border-danger-200 text-danger-600 text-xs rounded font-medium flex justify-between items-center">
           <span>{sessionError}</span>
           <button onClick={() => setSessionError('')} className="text-danger-600 hover:text-danger-800 text-sm font-bold ml-2">&times;</button>
+        </div>
+      )}
+
+      {/* Concluded Session Alert Banner */}
+      {concludedSession && (
+        <div className="card-panel bg-primary-50/70 border border-primary-200 p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status="info" label="Session Concluded" />
+                <h4 className="font-bold text-sm text-brand-navy">{concludedSession.title}</h4>
+              </div>
+              <p className="text-xs text-text-muted mt-1">
+                The live session has ended. Detailed attendance and behavioural summary metrics are ready.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link to={`/teacher/session/${concludedSession.id}/report`}>
+                <Button variant="primary" className="text-xs py-1.5 px-3">
+                  View Session Report &rarr;
+                </Button>
+              </Link>
+              <Button
+                variant="secondary"
+                onClick={() => setConcludedSession(null)}
+                className="text-xs py-1.5 px-2.5"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -475,7 +568,11 @@ export default function TeacherClassroom() {
                     </Button>
                   )}
                   {sess.status === 'ended' && (
-                    <span className="text-[11px] font-medium text-text-muted italic px-2">Completed</span>
+                    <Link to={`/teacher/session/${sess.id}/report`}>
+                      <Button variant="secondary" className="text-xs py-1 px-2.5">
+                        View Report
+                      </Button>
+                    </Link>
                   )}
                 </div>
               </div>

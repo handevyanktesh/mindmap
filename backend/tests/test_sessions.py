@@ -164,3 +164,27 @@ def test_session_lifecycle_and_ownership(client):
 
     invalid_end_resp = client.post("/api/sessions/nonexistent-session-id/end", headers={"Authorization": f"Bearer {teacher1_token}"})
     assert invalid_end_resp.status_code == 404
+
+    # 21. Teacher can fetch session summary for their own session
+    summary_resp = client.get(f"/api/sessions/{s1_id}/summary", headers={"Authorization": f"Bearer {teacher1_token}"})
+    assert summary_resp.status_code == 200
+    summary_data = summary_resp.json()
+    assert summary_data["id"] == s1_id
+    assert summary_data["status"] == "ended"
+    assert summary_data["classroom_id"] == c1_id
+    assert "duration_seconds" in summary_data
+    assert summary_data["duration_seconds"] >= 0
+    assert "total_participants" in summary_data
+    assert summary_data["telemetry_status"] == "in_memory_live_only"
+
+    # Teacher 2 (unauthorized) cannot access Teacher 1's session summary
+    t2_summary_resp = client.get(f"/api/sessions/{s1_id}/summary", headers={"Authorization": f"Bearer {teacher2_token}"})
+    assert t2_summary_resp.status_code == 403
+
+    # Unauthenticated cannot access session summary
+    unauth_summary = client.get(f"/api/sessions/{s1_id}/summary")
+    assert unauth_summary.status_code == 401
+
+    # Nonexistent session summary returns 404
+    nonexistent_summary = client.get("/api/sessions/nonexistent-id/summary", headers={"Authorization": f"Bearer {teacher1_token}"})
+    assert nonexistent_summary.status_code == 404
