@@ -98,6 +98,10 @@ def end_session(db, session_id: str, teacher_id: str) -> SessionResponse:
 
     now = datetime.now(timezone.utc)
     db.sessions.update_one({"_id": session_id}, {"$set": {"status": "ended", "ended_at": now}})
+    db.participants.update_many(
+        {"session_id": session_id, "status": "joined"},
+        {"$set": {"status": "left", "left_at": now}}
+    )
 
     updated_doc = db.sessions.find_one({"_id": session_id})
     updated_doc["id"] = updated_doc.pop("_id")

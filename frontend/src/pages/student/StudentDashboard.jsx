@@ -5,12 +5,6 @@ import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
 
 export default function StudentDashboard() {
-  // Mock data for recent/active classrooms
-  const activeClassrooms = [
-    { id: 'math-101', name: 'Calculus I', code: 'CAL-101', time: '10:00 AM - 11:30 AM', status: 'live' },
-    { id: 'cs-202', name: 'Data Structures', code: 'CS-202', time: '02:00 PM - 03:30 PM', status: 'scheduled' },
-  ]
-
   return (
     <PageContainer size="default" className="space-y-8">
       {/* Welcome banner */}
@@ -38,39 +32,24 @@ export default function StudentDashboard() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Classrooms List */}
+        {/* Active Session Entry */}
         <div className="md:col-span-2 space-y-4">
-          <h3 className="text-h3">Today's Classrooms</h3>
+          <h3 className="text-h3">Enter Classroom Session</h3>
           
-          <div className="space-y-3">
-            {activeClassrooms.map((room) => (
-              <div key={room.id} className="card-panel flex justify-between items-center bg-panel-bg">
-                <div>
-                  <h4 className="font-semibold text-brand-navy">{room.name}</h4>
-                  <div className="text-xs text-text-muted mt-1 space-x-2">
-                    <span>Code: <code className="bg-neutral-light border px-1 rounded">{room.code}</code></span>
-                    <span>&bull;</span>
-                    <span>{room.time}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {room.status === 'live' ? (
-                    <>
-                      <StatusBadge status="success" label="LIVE" />
-                      <Link to={`/student/classroom/${room.id}`}>
-                        <Button variant="accent" className="text-xs py-1.5 px-3">Enter Room</Button>
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      <StatusBadge status="info" label="Scheduled" />
-                      <Button variant="secondary" className="text-xs py-1.5 px-3" disabled>Upcoming</Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="card-panel bg-panel-bg space-y-4 p-6">
+            <div>
+              <h4 className="font-semibold text-brand-navy">Join Live Class</h4>
+              <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                Connect to an active lecture session using the unique access code provided by your instructor.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Link to="/student/join">
+                <Button variant="primary" className="text-xs py-2 px-4">
+                  Enter Classroom with Code &rarr;
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
 

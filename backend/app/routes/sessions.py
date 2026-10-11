@@ -15,6 +15,7 @@ from app.services.participant_service import (
     get_student_participation,
     list_session_participants
 )
+from app.services.connection_manager import manager
 
 router = APIRouter()
 
@@ -43,12 +44,17 @@ def start(
     return start_session(db, session_id, current_user["id"])
 
 @router.post("/{session_id}/end", response_model=SessionResponse)
-def end(
+async def end(
     session_id: str,
     db = Depends(get_db),
     current_user: dict = Depends(require_teacher)
 ):
-    return end_session(db, session_id, current_user["id"])
+    result = end_session(db, session_id, current_user["id"])
+    await manager.broadcast_to_session(session_id, {
+        "type": "session_ended",
+        "session_id": session_id
+    })
+    return result
 
 # --- Student Participation Routes ---
 

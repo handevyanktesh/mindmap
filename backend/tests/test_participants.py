@@ -153,6 +153,31 @@ def test_participant_join_leave_and_integrity(client):
     assert rejoined_p["status"] == "joined"
     assert rejoined_p["id"] != p1_id # New participant record
 
+    # F-03: Roster deduplication check: Student 1 appears exactly once as "joined"
+    t1_list_after_rejoin = client.get(f"/api/sessions/{session_id}/participants", headers={"Authorization": f"Bearer {teacher1_token}"})
+    assert t1_list_after_rejoin.status_code == 200
+    rejoined_list = t1_list_after_rejoin.json()
+    assert len(rejoined_list) == 2 # Exactly 2 logical students, not 3
+    s1_entries = [p for p in rejoined_list if p["student_email"] == "s1_part@test.com"]
+    assert len(s1_entries) == 1
+    assert s1_entries[0]["status"] == "joined"
+
+    # Repeated join while active is rejected
+    dup_rejoin = client.post(f"/api/sessions/{session_id}/join", headers={"Authorization": f"Bearer {student1_token}"})
+    assert dup_rejoin.status_code == 400
+    assert "already" in dup_rejoin.json()["detail"].lower()
+
+    # Student 1 leaves again -> verify status updates to "left" without creating duplicate row
+    leave2_resp = client.post(f"/api/sessions/{session_id}/leave", headers={"Authorization": f"Bearer {student1_token}"})
+    assert leave2_resp.status_code == 200
+    t1_list_after_leave2 = client.get(f"/api/sessions/{session_id}/participants", headers={"Authorization": f"Bearer {teacher1_token}"})
+    assert t1_list_after_leave2.status_code == 200
+    leave2_list = t1_list_after_leave2.json()
+    assert len(leave2_list) == 2
+    s1_entries_leave2 = [p for p in leave2_list if p["student_email"] == "s1_part@test.com"]
+    assert len(s1_entries_leave2) == 1
+    assert s1_entries_leave2[0]["status"] == "left"
+
     # Teacher ends session
     client.post(f"/api/sessions/{session_id}/end", headers={"Authorization": f"Bearer {teacher1_token}"})
 

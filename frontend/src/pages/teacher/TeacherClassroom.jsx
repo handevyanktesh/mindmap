@@ -68,7 +68,15 @@ export default function TeacherClassroom() {
           })
           if (partRes.ok) {
             const partData = await partRes.json()
-            setParticipants(partData)
+            const deduped = []
+            const seenIds = new Set()
+            for (const p of partData) {
+              if (!seenIds.has(p.student_id)) {
+                seenIds.add(p.student_id)
+                deduped.push(p)
+              }
+            }
+            setParticipants(deduped)
           }
         } else {
           setParticipants([])
@@ -227,9 +235,41 @@ export default function TeacherClassroom() {
             received_at_ms: data.received_at_ms
           }
         }))
+
+        // F-01 & F-03: Reconcile and synchronize the participant roster dynamically
+        setParticipants((prev) => {
+          const index = prev.findIndex((p) => p.student_id === studentId)
+          if (index >= 0) {
+            if (prev[index].status === 'joined') {
+              return prev
+            }
+            const updated = [...prev]
+            updated[index] = {
+              ...updated[index],
+              status: 'joined',
+              left_at: null
+            }
+            return updated
+          }
+          // Absent from REST-loaded roster: dynamically add participant
+          return [
+            ...prev,
+            {
+              id: `live_${studentId}`,
+              session_id: activeSession?.id,
+              classroom_id: id,
+              student_id: studentId,
+              student_name: data.student_name || 'Student',
+              student_email: '', // Not exposed over telemetry to protect privacy
+              joined_at: new Date(data.received_at_ms || Date.now()).toISOString(),
+              left_at: null,
+              status: 'joined'
+            }
+          ]
+        })
       }
     }
-  }, [lastMessage])
+  }, [lastMessage, activeSession?.id, id])
 
   // Reset live telemetry when active session changes or ends
   useEffect(() => {

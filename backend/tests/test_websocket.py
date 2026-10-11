@@ -374,6 +374,24 @@ def test_phase3c_behavioural_telemetry(client):
                     pong_t2 = ws_teacher2.receive_json()
                     assert pong_t2["type"] == "pong"
 
+                    # F-02: Ending session notifies connected clients with session_ended
+                    end_resp = client.post(f"/api/sessions/{s1_id}/end", headers={"Authorization": f"Bearer {teacher_token}"})
+                    assert end_resp.status_code == 200
+
+                    # Connected students in session 1 receive session_ended event
+                    student1_event = ws_student1.receive_json()
+                    assert student1_event["type"] == "session_ended"
+                    assert student1_event["session_id"] == s1_id
+
+                    student2_event = ws_student2.receive_json()
+                    assert student2_event["type"] == "session_ended"
+                    assert student2_event["session_id"] == s1_id
+
+                    # Teacher in Session 2 did NOT receive session_ended for Session 1 (Session isolation)
+                    ws_teacher2.send_json({"type": "ping"})
+                    pong_t2_post = ws_teacher2.receive_json()
+                    assert pong_t2_post["type"] == "pong"
+
     # T15: Clean disconnect
     assert manager.get_connection_count(s1_id) == 0
     assert manager.get_connection_count(s2_id) == 0

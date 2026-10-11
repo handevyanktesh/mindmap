@@ -16,15 +16,16 @@ export default function StudentClassroom() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [leaving, setLeaving] = useState(false)
+  const [sessionEnded, setSessionEnded] = useState(false)
 
   const token = localStorage.getItem('token')
   const isJoined = participation !== null && participation.status === 'joined'
 
   // Real-time WebSocket connection
-  const { isConnected: isWsConnected, sendBehaviourUpdate } = useSessionWebSocket(
+  const { isConnected: isWsConnected, lastMessage, sendBehaviourUpdate } = useSessionWebSocket(
     id,
     token,
-    isJoined
+    isJoined && !sessionEnded
   )
 
   // Browser webcam preview (100% local, no raw frames transmitted)
@@ -34,7 +35,7 @@ export default function StudentClassroom() {
     error: cameraError,
     startCamera,
     stopCamera
-  } = useCamera(isJoined)
+  } = useCamera(isJoined && !sessionEnded)
 
   // MediaPipe Face Landmarker (runs strictly browser-locally on active camera)
   const {
@@ -116,12 +117,20 @@ export default function StudentClassroom() {
     }
   }, [id, navigate])
 
+  // Handle session termination event from teacher
+  useEffect(() => {
+    if (lastMessage?.type === 'session_ended') {
+      stopCamera()
+      setSessionEnded(true)
+    }
+  }, [lastMessage, stopCamera])
+
   // Phase 3C: Throttled transmission of derived behavioural assessment to WebSocket
   const lastSentTimeRef = useRef(0)
   const lastSentStateRef = useRef({ engagement: null, confusion: null })
 
   useEffect(() => {
-    if (!isWsConnected || cameraStatus !== 'active' || !inferenceData) return
+    if (!isWsConnected || cameraStatus !== 'active' || !inferenceData || sessionEnded) return
 
     const currentEngagement = inferenceData.engagement?.state || 'UNCERTAIN'
     const currentConfusion = inferenceData.confusion?.state || 'UNCERTAIN'
@@ -149,7 +158,7 @@ export default function StudentClassroom() {
         confusion: currentConfusion
       }
     }
-  }, [inferenceData, isWsConnected, cameraStatus, sendBehaviourUpdate])
+  }, [inferenceData, isWsConnected, cameraStatus, sessionEnded, sendBehaviourUpdate])
 
   const handleLeaveSession = async () => {
     stopCamera()
@@ -165,6 +174,25 @@ export default function StudentClassroom() {
     } finally {
       navigate('/student')
     }
+  }
+
+  if (sessionEnded) {
+    return (
+      <PageContainer size="small" className="py-12">
+        <div className="card-panel space-y-4 text-center">
+          <StatusBadge status="info" label="Session Concluded" />
+          <h3 className="text-h3 text-brand-navy">Lecture Session Has Ended</h3>
+          <p className="text-xs text-text-muted leading-relaxed">
+            Your instructor has concluded this session. Camera access and local behavioral processing have been stopped.
+          </p>
+          <div className="pt-2">
+            <Link to="/student">
+              <Button variant="primary">Return to Student Portal</Button>
+            </Link>
+          </div>
+        </div>
+      </PageContainer>
+    )
   }
 
   if (loading) {

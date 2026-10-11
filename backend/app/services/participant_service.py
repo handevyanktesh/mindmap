@@ -118,8 +118,14 @@ def list_session_participants(db, session_id: str, teacher_id: str) -> List[Part
 
     cursor = db.participants.find({"session_id": session_id}).sort("joined_at", -1)
     results = []
+    seen_student_ids = set()
     for p in cursor:
-        student = db.users.find_one({"_id": p["student_id"]})
+        student_id = p["student_id"]
+        if student_id in seen_student_ids:
+            continue
+        seen_student_ids.add(student_id)
+
+        student = db.users.find_one({"_id": student_id})
         student_name = student.get("name", "Unknown Student") if student else "Unknown Student"
         student_email = student.get("email", "") if student else ""
         results.append(
