@@ -64,5 +64,19 @@ class SessionConnectionManager:
             except Exception:
                 self.remove(connection)
 
+    async def send_to_teachers(self, session_id: str, message: dict) -> None:
+        """
+        Sends a JSON message only to active connections in the session with role 'teacher'.
+        Students in the session do NOT receive this message.
+        """
+        connections = self.get_session_connections(session_id)
+        for connection in connections:
+            meta = self._connection_metadata.get(connection)
+            if meta and meta.get("role") == "teacher":
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    self.remove(connection)
+
 # Global singleton instance for the application
 manager = SessionConnectionManager()

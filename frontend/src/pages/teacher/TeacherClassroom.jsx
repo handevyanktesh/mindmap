@@ -4,6 +4,8 @@ import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import Input from '../../components/Input'
 import StatusBadge from '../../components/StatusBadge'
+import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
+import { calculateClassroomAggregation, isStudentReporting } from '../../features/classroom/classroomAggregation'
 
 export default function TeacherClassroom() {
   const { id } = useParams()
@@ -195,20 +197,57 @@ export default function TeacherClassroom() {
 
   const courseTitle = classroom ? classroom.name : `Classroom session: ${id?.toUpperCase()}`
 
-  // Mock student tracking roster
-  const studentRoster = [
-    { name: 'Alice Smith', status: 'attentive', attention: '94%', confusion: '2%' },
-    { name: 'Bob Johnson', status: 'confused', attention: '65%', confusion: '45%' },
-    { name: 'Charlie Brown', status: 'attentive', attention: '88%', confusion: '8%' },
-    { name: 'Diana Prince', status: 'away', attention: '15%', confusion: '0%' },
-    { name: 'Evan Wright', status: 'confused', attention: '58%', confusion: '52%' }
-  ]
+  // Phase 3C: Live student telemetry registry & real-time WebSocket connection
+  const [liveTelemetry, setLiveTelemetry] = useState({})
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
-  // Mock alerts list
-  const activeAlerts = [
-    { type: 'warning', message: 'High confusion indices detected (Topic: Bounds integration)', time: '3 mins ago' },
-    { type: 'danger', message: 'Student "Diana Prince" camera feed inactive', time: '5 mins ago' }
-  ]
+  const token = localStorage.getItem('token')
+  const isWsActive = Boolean(activeSession && activeSession.status === 'active')
+  const { isConnected: isWsConnected, lastMessage } = useSessionWebSocket(
+    activeSession?.id,
+    token,
+    isWsActive
+  )
+
+  // Ingest incoming student_behaviour_telemetry
+  useEffect(() => {
+    if (!lastMessage) return
+    if (lastMessage.type === 'student_behaviour_telemetry' && lastMessage.data) {
+      const data = lastMessage.data
+      const studentId = data.user_id
+      if (studentId) {
+        setLiveTelemetry((prev) => ({
+          ...prev,
+          [studentId]: {
+            user_id: studentId,
+            student_name: data.student_name,
+            engagement_state: data.engagement_state,
+            confusion_signal: data.confusion_signal,
+            confidence: data.confidence,
+            received_at_ms: data.received_at_ms
+          }
+        }))
+      }
+    }
+  }, [lastMessage])
+
+  // Reset live telemetry when active session changes or ends
+  useEffect(() => {
+    if (!activeSession) {
+      setLiveTelemetry({})
+    }
+  }, [activeSession])
+
+  // Periodic ticker to re-evaluate student staleness (>10s)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now())
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Calculate live classroom aggregation
+  const aggregation = calculateClassroomAggregation(liveTelemetry, nowMs)
 
   if (loading) {
     return <PageContainer size="large" className="py-6"><p className="text-text-muted">Loading...</p></PageContainer>
@@ -240,7 +279,6 @@ export default function TeacherClassroom() {
           <div>
             <h2 className="font-bold text-brand-navy text-base">
               {currentSession ? `${courseTitle} — ${currentSession.title}` : courseTitle}
-              <span className="text-[10px] font-normal text-warning-600 bg-warning-50 px-2 py-0.5 rounded ml-2 align-middle">Demo Telemetry</span>
             </h2>
             <div className="text-[10px] text-text-muted mt-0.5 space-x-2">
               <span>Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{classroom?.join_code}</code></span>
@@ -405,152 +443,195 @@ export default function TeacherClassroom() {
         )}
       </div>
 
-      {/* Metric summaries widget grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card-panel text-center">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Avg Engagement Estimate</span>
-          <div className="text-3xl font-extrabold text-primary-600 mt-1">82%</div>
-          <span className="text-[9px] text-success-600 font-bold block mt-1">&#8593; Optimal Range</span>
+      {/* Privacy Notice Banner */}
+      <div className="bg-primary-50/60 border border-primary-200/70 rounded p-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+        <div className="flex items-center gap-2 text-brand-navy">
+          <span className="text-[10px] uppercase font-bold tracking-wider bg-primary-100 text-primary-800 px-1.5 py-0.5 rounded">Privacy Assurance</span>
+          <p className="text-xs text-brand-navy-light">
+            Browser-local inference; only derived behavioural signals are transmitted to the teacher dashboard.
+          </p>
         </div>
-
-        <div className="card-panel text-center">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Avg Confusion-related Signal</span>
-          <div className="text-3xl font-extrabold text-warning-600 mt-1">16%</div>
-          <span className="text-[9px] text-text-muted block mt-1">Baseline Reference</span>
-        </div>
-
-        <div className="card-panel text-center">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Active Warnings</span>
-          <div className="text-3xl font-extrabold text-danger-600 mt-1">{activeAlerts.length}</div>
-          <span className="text-[9px] text-danger-600 font-semibold block mt-1">Requires Interaction</span>
+        <div className="text-[10px] font-mono text-text-muted flex items-center gap-1.5 self-end sm:self-auto">
+          <span className={`inline-block w-2 h-2 rounded-full ${isWsConnected ? 'bg-success-500' : 'bg-neutral-border'}`} />
+          <span>{isWsConnected ? 'WebSocket Live' : 'WebSocket Standby'}</span>
         </div>
       </div>
 
-      {/* Engagement Timeline Graph Card */}
+      {/* Real-time Classroom Aggregates Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="card-panel text-center py-3">
+          <span className="text-[10px] uppercase font-mono text-text-muted">Reporting Students</span>
+          <div className="text-2xl font-extrabold text-brand-navy mt-1">
+            {aggregation.reportingCount}
+            <span className="text-xs font-normal text-text-muted ml-1">/ {participants.filter((p) => p.status === 'joined').length}</span>
+          </div>
+          <span className="text-[9px] text-text-muted block mt-0.5">Active Telemetry</span>
+        </div>
+
+        <div className="card-panel text-center py-3">
+          <span className="text-[10px] uppercase font-mono text-text-muted">Normal Behaviour</span>
+          <div className="text-2xl font-extrabold text-emerald-600 mt-1">
+            {aggregation.normalPercentage !== null ? `${Math.round(aggregation.normalPercentage)}%` : '—'}
+          </div>
+          <span className="text-[9px] text-text-muted block mt-0.5">
+            {aggregation.counts.normal} student{aggregation.counts.normal === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="card-panel text-center py-3">
+          <span className="text-[10px] uppercase font-mono text-text-muted">Reduced Engagement</span>
+          <div className="text-2xl font-extrabold text-amber-600 mt-1">
+            {aggregation.reducedPercentage !== null ? `${Math.round(aggregation.reducedPercentage)}%` : '—'}
+          </div>
+          <span className="text-[9px] text-text-muted block mt-0.5">
+            {aggregation.counts.reduced} student{aggregation.counts.reduced === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="card-panel text-center py-3">
+          <span className="text-[10px] uppercase font-mono text-text-muted">Elevated Confusion</span>
+          <div className="text-2xl font-extrabold text-warning-600 mt-1">
+            {aggregation.elevatedConfusionPercentage !== null ? `${Math.round(aggregation.elevatedConfusionPercentage)}%` : '—'}
+          </div>
+          <span className="text-[9px] text-text-muted block mt-0.5">
+            {aggregation.counts.elevatedConfusion} student{aggregation.counts.elevatedConfusion === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="card-panel text-center py-3 col-span-2 sm:col-span-1">
+          <span className="text-[10px] uppercase font-mono text-text-muted">Mean Confidence</span>
+          <div className="text-2xl font-extrabold text-primary-600 mt-1">
+            {aggregation.meanConfidence !== null ? aggregation.meanConfidence.toFixed(2) : '—'}
+          </div>
+          <span className="text-[9px] text-text-muted block mt-0.5">Evidence Quality</span>
+        </div>
+      </div>
+
+      {/* Real-time Session Participants Roster */}
       <div className="card-panel space-y-4">
         <div className="flex justify-between items-center border-b border-neutral-border pb-3">
-          <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Live Engagement Trend Timeline</h3>
-          <span className="text-[9px] font-mono text-text-muted">[ Updated every 5 seconds ]</span>
+          <div className="flex items-center gap-2">
+            <h3 className="text-h3 text-sm font-semibold text-brand-navy">Live Participant Behaviour Roster</h3>
+            <span className="text-xs bg-primary-50 text-primary-600 font-bold px-2 py-0.5 rounded-full border border-primary-100">
+              {participants.filter((p) => p.status === 'joined').length} Enrolled
+            </span>
+          </div>
+          <span className="text-[10px] text-text-muted">
+            {aggregation.reportingCount} of {participants.filter((p) => p.status === 'joined').length} reporting live telemetry
+          </span>
         </div>
 
-        {/* Mock Line Graph visual placeholder */}
-        <div className="border border-neutral-border rounded p-6 bg-neutral-light/35 flex flex-col justify-center items-center text-center h-40">
-          <div className="w-full flex items-end justify-between gap-2 max-w-2xl h-24 pt-4 border-b border-l border-neutral-border select-none">
-            <div className="w-full bg-primary-600/20 h-16 hover:bg-primary-600/30 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">70%</span>
-            </div>
-            <div className="w-full bg-primary-600/30 h-18 hover:bg-primary-600/40 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">75%</span>
-            </div>
-            <div className="w-full bg-primary-600/40 h-20 hover:bg-primary-600/50 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">80%</span>
-            </div>
-            <div className="w-full bg-primary-600/50 h-20 hover:bg-primary-600/60 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">80%</span>
-            </div>
-            <div className="w-full bg-primary-600/70 h-22 hover:bg-primary-600/80 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">88%</span>
-            </div>
-            <div className="w-full bg-primary-600 h-24 hover:bg-primary-700 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">92%</span>
-            </div>
-            <div className="w-full bg-primary-600 h-22 hover:bg-primary-700 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">88%</span>
-            </div>
-            <div className="w-full bg-primary-600/80 h-16 hover:bg-primary-600/90 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">70%</span>
-            </div>
-            <div className="w-full bg-primary-600/60 h-14 hover:bg-primary-600/70 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">65%</span>
-            </div>
-            <div className="w-full bg-primary-600/80 h-20 hover:bg-primary-600/95 rounded-t-sm relative group">
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-brand-navy text-white text-[8px] px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">82%</span>
-            </div>
+        {participants.length === 0 ? (
+          <p className="text-xs text-text-muted py-6 text-center">
+            No students have joined this session yet. Share the classroom code for students to enter when active.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-neutral-light border-b border-neutral-border text-[11px] font-semibold text-brand-navy">
+                  <th className="p-3">Student</th>
+                  <th className="p-3">Session Status</th>
+                  <th className="p-3">Engagement Assessment</th>
+                  <th className="p-3">Confusion Signal</th>
+                  <th className="p-3">Confidence</th>
+                  <th className="p-3 text-right">Telemetry Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-border">
+                {participants.map((p) => {
+                  const telemetry = liveTelemetry[p.student_id]
+                  const reporting = isStudentReporting(telemetry, nowMs)
+                  const isParticipantActive = p.status === 'joined'
+
+                  return (
+                    <tr key={p.id} className="hover:bg-neutral-light/40 transition-colors">
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-neutral-light border border-neutral-border flex items-center justify-center font-bold text-[11px] text-brand-navy shrink-0">
+                            {p.student_name ? p.student_name.split(' ').map((n) => n[0]).join('') : 'S'}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-brand-navy text-xs">{p.student_name}</div>
+                            <div className="text-[10px] text-text-muted">{p.student_email}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="p-3">
+                        {p.status === 'joined' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Joined
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
+                            <span className="w-1.5 h-1.5 rounded-full bg-neutral-border" /> Left
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        {isParticipantActive && reporting && telemetry ? (
+                          <>
+                            {telemetry.engagement_state === 'NORMAL_BEHAVIOUR' && (
+                              <span className="text-emerald-700 font-medium text-[11px]">Normal behaviour</span>
+                            )}
+                            {telemetry.engagement_state === 'REDUCED_ENGAGEMENT_LIKE' && (
+                              <span className="text-amber-700 font-medium text-[11px]">Reduced-engagement-like</span>
+                            )}
+                            {telemetry.engagement_state === 'UNCERTAIN' && (
+                              <span className="text-neutral-500 text-[11px]">Uncertain</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-text-muted text-[11px]">—</span>
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        {isParticipantActive && reporting && telemetry ? (
+                          <>
+                            {telemetry.confusion_signal === 'LOW' && (
+                              <span className="text-brand-navy text-[11px]">Low</span>
+                            )}
+                            {telemetry.confusion_signal === 'ELEVATED' && (
+                              <span className="text-amber-700 font-medium text-[11px]">Elevated</span>
+                            )}
+                            {telemetry.confusion_signal === 'UNCERTAIN' && (
+                              <span className="text-neutral-500 text-[11px]">Uncertain</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-text-muted text-[11px]">—</span>
+                        )}
+                      </td>
+
+                      <td className="p-3 font-mono text-[11px]">
+                        {isParticipantActive && reporting && typeof telemetry?.confidence === 'number' ? (
+                          <span className="text-text-muted">{telemetry.confidence.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-text-muted">—</span>
+                        )}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        {isParticipantActive ? (
+                          reporting ? (
+                            <StatusBadge status="success" label="Reporting" />
+                          ) : (
+                            <StatusBadge status="info" label="Inactive" />
+                          )
+                        ) : (
+                          <StatusBadge status="info" label="Left" />
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="flex justify-between w-full max-w-2xl text-[9px] text-text-muted mt-2 font-mono">
-            <span>10:00 AM</span>
-            <span>10:10 AM</span>
-            <span>10:20 AM</span>
-            <span>10:30 AM (Current)</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Roster & Anomaly Alert Split Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Side: Real Session Participants */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="card-panel space-y-4">
-            <div className="flex justify-between items-center border-b border-neutral-border pb-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-h3">Session Participants</h3>
-                <span className="text-xs bg-primary-50 text-primary-600 font-bold px-2 py-0.5 rounded-full border border-primary-100">
-                  {participants.filter(p => p.status === 'joined').length} Active
-                </span>
-              </div>
-              <span className="text-[10px] text-text-muted">Total Enrolled in Session: {participants.length}</span>
-            </div>
-
-            {participants.length === 0 ? (
-              <p className="text-xs text-text-muted py-6 text-center">
-                No students have joined this session yet. Share the classroom code for students to enter when active.
-              </p>
-            ) : (
-              <div className="divide-y divide-neutral-border">
-                {participants.map((p) => (
-                  <div key={p.id} className="flex justify-between items-center py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-neutral-light border border-neutral-border flex items-center justify-center font-bold text-xs text-brand-navy">
-                        {p.student_name ? p.student_name.split(' ').map((n) => n[0]).join('') : 'S'}
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-brand-navy">{p.student_name}</div>
-                        <div className="text-[10px] text-text-muted">{p.student_email}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs">
-                      <span className="text-[10px] text-text-muted hidden sm:inline">
-                        Joined: {new Date(p.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {p.left_at && ` • Left: ${new Date(p.left_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                      </span>
-                      {p.status === 'joined' ? (
-                        <StatusBadge status="success" label="Joined" />
-                      ) : (
-                        <StatusBadge status="info" label="Left" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Side: Alert dashboard warnings */}
-        <div className="space-y-4">
-          <div className="card-panel space-y-4">
-            <h3 className="text-h3 border-b border-neutral-border pb-3">Anomalous Activity Logs</h3>
-            
-            <div className="space-y-3">
-              {activeAlerts.map((alert, idx) => (
-                <div key={idx} className={`p-4 rounded border text-xs leading-relaxed ${
-                  alert.type === 'danger'
-                    ? 'bg-danger-50 border-danger-200 text-danger-600'
-                    : 'bg-warning-50 border-warning-200 text-warning-600'
-                }`}>
-                  <div className="flex justify-between font-bold mb-1">
-                    <span className="uppercase text-[9px]">{alert.type === 'danger' ? 'Critical Action' : 'Notice Alert'}</span>
-                    <span className="font-mono font-normal text-text-muted">{alert.time}</span>
-                  </div>
-                  <p>{alert.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
+        )}
       </div>
 
     </PageContainer>

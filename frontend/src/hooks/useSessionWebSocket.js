@@ -52,5 +52,18 @@ export function useSessionWebSocket(sessionId, token, enabled = true) {
     }
   }, [])
 
-  return { isConnected, lastMessage, sendPing }
+  const sendBehaviourUpdate = useCallback((payload) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && payload) {
+      wsRef.current.send(JSON.stringify({
+        type: 'student_behaviour_update',
+        payload: {
+          engagement_state: payload.engagement_state,
+          confusion_signal: payload.confusion_signal,
+          confidence: typeof payload.confidence === 'number' ? payload.confidence : 0.0
+        }
+      }))
+    }
+  }, [])
+
+  return { isConnected, lastMessage, sendPing, sendBehaviourUpdate }
 }

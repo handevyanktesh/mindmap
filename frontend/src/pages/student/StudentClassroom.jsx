@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -21,7 +21,7 @@ export default function StudentClassroom() {
   const isJoined = participation !== null && participation.status === 'joined'
 
   // Real-time WebSocket connection
-  const { isConnected: isWsConnected } = useSessionWebSocket(
+  const { isConnected: isWsConnected, sendBehaviourUpdate } = useSessionWebSocket(
     id,
     token,
     isJoined
@@ -115,6 +115,41 @@ export default function StudentClassroom() {
       isMounted = false
     }
   }, [id, navigate])
+
+  // Phase 3C: Throttled transmission of derived behavioural assessment to WebSocket
+  const lastSentTimeRef = useRef(0)
+  const lastSentStateRef = useRef({ engagement: null, confusion: null })
+
+  useEffect(() => {
+    if (!isWsConnected || cameraStatus !== 'active' || !inferenceData) return
+
+    const currentEngagement = inferenceData.engagement?.state || 'UNCERTAIN'
+    const currentConfusion = inferenceData.confusion?.state || 'UNCERTAIN'
+    const currentConfidence = typeof inferenceData.engagement?.confidence === 'number'
+      ? inferenceData.engagement.confidence
+      : 0.0
+
+    const now = Date.now()
+    const stateChanged =
+      currentEngagement !== lastSentStateRef.current.engagement ||
+      currentConfusion !== lastSentStateRef.current.confusion
+
+    const timeSinceLast = now - lastSentTimeRef.current
+
+    // Transmit approximately once per second (1000ms) OR immediately upon state change
+    if (stateChanged || timeSinceLast >= 1000) {
+      sendBehaviourUpdate({
+        engagement_state: currentEngagement,
+        confusion_signal: currentConfusion,
+        confidence: currentConfidence
+      })
+      lastSentTimeRef.current = now
+      lastSentStateRef.current = {
+        engagement: currentEngagement,
+        confusion: currentConfusion
+      }
+    }
+  }, [inferenceData, isWsConnected, cameraStatus, sendBehaviourUpdate])
 
   const handleLeaveSession = async () => {
     stopCamera()

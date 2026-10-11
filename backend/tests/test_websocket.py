@@ -170,3 +170,211 @@ def test_websocket_session_isolation(client):
             ws_b.send_json({"type": "ping"})
             resp_b = ws_b.receive_json()
             assert resp_b["type"] == "pong"
+
+
+def test_phase3c_behavioural_telemetry(client):
+    """
+    Validates Phase 3C WebSocket behavioural telemetry specifications (T1 to T15).
+    """
+    teacher_token = get_auth_token(client, "t_telemetry@test.com", "teacher")
+    student1_token = get_auth_token(client, "s1_telemetry@test.com", "student")
+    student2_token = get_auth_token(client, "s2_telemetry@test.com", "student")
+    teacher2_token = get_auth_token(client, "t2_telemetry@test.com", "teacher")
+
+    # Setup classroom and sessions
+    c1_id = client.post("/api/classrooms/", json={"name": "Class 1"}, headers={"Authorization": f"Bearer {teacher_token}"}).json()["id"]
+    c2_id = client.post("/api/classrooms/", json={"name": "Class 2"}, headers={"Authorization": f"Bearer {teacher2_token}"}).json()["id"]
+
+    s1_id = client.post("/api/sessions/", json={"classroom_id": c1_id, "title": "Session 1"}, headers={"Authorization": f"Bearer {teacher_token}"}).json()["id"]
+    s2_id = client.post("/api/sessions/", json={"classroom_id": c2_id, "title": "Session 2"}, headers={"Authorization": f"Bearer {teacher2_token}"}).json()["id"]
+
+    # Start both sessions
+    client.post(f"/api/sessions/{s1_id}/start", headers={"Authorization": f"Bearer {teacher_token}"})
+    client.post(f"/api/sessions/{s2_id}/start", headers={"Authorization": f"Bearer {teacher2_token}"})
+
+    # Student 1 & 2 join Session 1
+    client.post(f"/api/sessions/{s1_id}/join", headers={"Authorization": f"Bearer {student1_token}"})
+    client.post(f"/api/sessions/{s1_id}/join", headers={"Authorization": f"Bearer {student2_token}"})
+
+    # Connect Teacher 1, Student 1, Student 2 to Session 1, and Teacher 2 to Session 2
+    with client.websocket_connect(f"/ws/sessions/{s1_id}?token={teacher_token}") as ws_teacher1:
+        with client.websocket_connect(f"/ws/sessions/{s1_id}?token={student1_token}") as ws_student1:
+            with client.websocket_connect(f"/ws/sessions/{s1_id}?token={student2_token}") as ws_student2:
+                with client.websocket_connect(f"/ws/sessions/{s2_id}?token={teacher2_token}") as ws_teacher2:
+                    # Flush connection greetings
+                    assert ws_teacher1.receive_json()["type"] == "session_connected"
+                    assert ws_student1.receive_json()["type"] == "session_connected"
+                    assert ws_student2.receive_json()["type"] == "session_connected"
+                    assert ws_teacher2.receive_json()["type"] == "session_connected"
+
+                    # T2: Teacher cannot send student_behaviour_update
+                    ws_teacher1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": 0.8
+                        }
+                    })
+                    err = ws_teacher1.receive_json()
+                    assert err["type"] == "error"
+                    assert "Only students" in err["message"]
+
+                    # T5: Missing engagement_state rejected
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "confusion_signal": "LOW",
+                            "confidence": 0.8
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "Missing required fields" in err["message"]
+
+                    # T6: Missing confusion_signal rejected
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confidence": 0.8
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "Missing required fields" in err["message"]
+
+                    # T7: Invalid engagement state rejected
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "ATTENTIVE",
+                            "confusion_signal": "LOW",
+                            "confidence": 0.8
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "Invalid engagement_state" in err["message"]
+
+                    # T8: Invalid confusion signal rejected
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "VERY_CONFUSED",
+                            "confidence": 0.8
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "Invalid confusion_signal" in err["message"]
+
+                    # T9: Confidence outside [0,1] or non-numeric rejected
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": 1.5
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "Confidence" in err["message"]
+
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": "high"
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+
+                    # T10: Extra biometric fields rejected (Privacy guardrail)
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": 0.85,
+                            "landmarks": [1, 2, 3]
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "extra biometric fields" in err["message"]
+
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": 0.85,
+                            "ear": 0.35
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "extra biometric fields" in err["message"]
+
+                    # Extra unexpected non-biometric fields rejected (Strict payload check)
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": 0.85,
+                            "timestamp_ms": 1728362400000
+                        }
+                    })
+                    err = ws_student1.receive_json()
+                    assert err["type"] == "error"
+                    assert "unexpected fields" in err["message"]
+
+                    # T1 / T11 / T14: Student sends valid update -> Reaches teacher with authoritative server timestamp & injected identity
+                    ws_student1.send_json({
+                        "type": "student_behaviour_update",
+                        "payload": {
+                            "engagement_state": "NORMAL_BEHAVIOUR",
+                            "confusion_signal": "LOW",
+                            "confidence": 0.92
+                        }
+                    })
+
+                    # Teacher 1 receives enriched telemetry with data dictionary
+                    msg = ws_teacher1.receive_json()
+                    assert msg["type"] == "student_behaviour_telemetry"
+                    assert "data" in msg
+                    data = msg["data"]
+                    assert data["user_id"] == "user_student1_id" or len(data["user_id"]) > 0
+                    assert data["student_name"] == "User s1_telemetry@test.com"
+                    assert "student_email" not in data
+                    assert data["engagement_state"] == "NORMAL_BEHAVIOUR"
+                    assert data["confusion_signal"] == "LOW"
+                    assert data["confidence"] == 0.92
+                    assert "received_at_ms" in data
+                    assert isinstance(data["received_at_ms"], int)
+
+                    # T12: Student 2 does NOT receive Student 1's telemetry (Peer privacy)
+                    ws_student2.send_json({"type": "ping"})
+                    pong2 = ws_student2.receive_json()
+                    assert pong2["type"] == "pong"
+
+                    # Student 1 does NOT receive its own telemetry back
+                    ws_student1.send_json({"type": "ping"})
+                    pong1 = ws_student1.receive_json()
+                    assert pong1["type"] == "pong"
+
+                    # T13: Teacher in Session 2 does NOT receive Session 1 telemetry (Session isolation)
+                    ws_teacher2.send_json({"type": "ping"})
+                    pong_t2 = ws_teacher2.receive_json()
+                    assert pong_t2["type"] == "pong"
+
+    # T15: Clean disconnect
+    assert manager.get_connection_count(s1_id) == 0
+    assert manager.get_connection_count(s2_id) == 0
+
