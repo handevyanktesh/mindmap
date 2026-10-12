@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.database import connect_to_mongo, close_mongo_connection
+from app.core.config import settings
+from app.core.database import connect_to_mongo, close_mongo_connection, check_mongo_health
 from app.routes import auth, classrooms, sessions, ws
 import contextlib
 
@@ -14,10 +15,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MindMap API", lifespan=lifespan)
 
-# CORS configuration
+# Configurable CORS with explicitly trusted origins and credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to the frontend URL
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,5 +31,9 @@ app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 
 @app.get("/health")
-def health_check():
-    return {"status": "ok"}
+def health_check(response: Response):
+    is_healthy = check_mongo_health()
+    if is_healthy:
+        return {"status": "ok", "database": "connected"}
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "unhealthy", "database": "disconnected"}

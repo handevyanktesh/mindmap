@@ -97,6 +97,9 @@ cp backend/.env.example backend/.env
 
 Default configuration contents:
 ```env
+# Application Environment ('development' or 'production')
+ENVIRONMENT=development
+
 # MongoDB Connection String (Atlas URI or local instance)
 # Local instance default:
 MONGODB_URI=mongodb://localhost:27017
@@ -105,6 +108,7 @@ MONGODB_URI=mongodb://localhost:27017
 DATABASE_NAME=mindmap_db
 
 # Secret key for signing JWT tokens
+# Development allows default fallback; production strictly requires min 32-char random string
 JWT_SECRET=supersecretkey_dev_testing_only
 
 # Algorithm for JWT signing
@@ -112,10 +116,16 @@ JWT_ALGORITHM=HS256
 
 # Expiry duration for JWT tokens in minutes (10080 = 7 days)
 JWT_EXPIRE_MINUTES=10080
+
+# Allowed CORS Origins (comma-separated list of trusted origins)
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000
 ```
 
 > **Note on MongoDB URI:** If using MongoDB Atlas, replace `MONGODB_URI` with your connection string:
 > `mongodb+srv://<username>:<password>@<cluster>.mongodb.net`
+>
+> **Note on Production Deployment:** When setting `ENVIRONMENT=production` on hosting platforms (such as Render), `JWT_SECRET` must be set to a cryptographically secure string of at least 32 characters, and `CORS_ORIGINS` must include your production frontend URL (e.g. `https://your-mindmap-frontend.vercel.app`).
+
 
 ### Frontend (`frontend/.env`)
 Copy `frontend/.env.example` to `frontend/.env`:

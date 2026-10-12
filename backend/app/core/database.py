@@ -1,5 +1,5 @@
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from pymongo.errors import ConnectionFailure, PyMongoError
 from app.core.config import settings
 
 client = None
@@ -34,9 +34,9 @@ def connect_to_mongo():
             partialFilterExpression={"status": "joined"}
         )
         
-        print(f"Connected to MongoDB Atlas database: {settings.DATABASE_NAME}")
+        print(f"Connected to MongoDB database: {settings.DATABASE_NAME}")
     except ConnectionFailure as e:
-        print(f"Failed to connect to MongoDB Atlas: {e}")
+        print(f"Failed to connect to MongoDB: {e}")
         client = None
         db = None
     except Exception as e:
@@ -44,10 +44,25 @@ def connect_to_mongo():
         client = None
         db = None
 
+def check_mongo_health() -> bool:
+    """
+    Actively checks MongoDB ping readiness. Returns True if DB is reachable, False otherwise.
+    """
+    global client, db
+    if client is None or db is None:
+        return False
+    try:
+        client.admin.command('ping')
+        return True
+    except (ConnectionFailure, PyMongoError, Exception):
+        return False
+
 def close_mongo_connection():
-    global client
+    global client, db
     if client:
         client.close()
+        client = None
+        db = None
         print("MongoDB connection closed.")
 
 def get_database():
