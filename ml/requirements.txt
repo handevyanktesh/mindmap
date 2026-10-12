@@ -1,0 +1,12 @@
+# Core dependencies for MindMap ML Training & Evaluation Pipeline
+scikit-learn>=1.5.0
+pandas>=2.0.0
+numpy>=1.26.0
+scipy>=1.14.0
+joblib>=1.4.0
+pytest>=8.0.0
+
+# Optional dependencies for raw video extraction from .avi/.mp4 files
+# (Not required when processing pre-extracted landmark or feature datasets)
+# opencv-python>=4.10.0
+# mediapipe>=0.10.14
