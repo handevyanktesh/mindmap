@@ -1,8 +1,9 @@
-import uuid
+﻿import uuid
 from datetime import datetime, timezone
 from typing import List
 from fastapi import HTTPException
 from app.schemas.session import SessionCreate, SessionResponse, SessionSummaryResponse, ParticipantSummary
+from app.services.analytics_service import analytics_manager
 
 def create_session(db, session_in: SessionCreate, teacher_id: str) -> SessionResponse:
     classroom = db.classrooms.find_one({"_id": session_in.classroom_id})
@@ -76,6 +77,7 @@ def start_session(db, session_id: str, teacher_id: str) -> SessionResponse:
 
     now = datetime.now(timezone.utc)
     db.sessions.update_one({"_id": session_id}, {"$set": {"status": "active", "started_at": now}})
+    analytics_manager.start_session(session_id, doc.get("classroom_id"), teacher_id, doc.get("title", "Session"), now)
 
     updated_doc = db.sessions.find_one({"_id": session_id})
     updated_doc["id"] = updated_doc.pop("_id")
@@ -102,6 +104,9 @@ def end_session(db, session_id: str, teacher_id: str) -> SessionResponse:
         {"session_id": session_id, "status": "joined"},
         {"$set": {"status": "left", "left_at": now}}
     )
+
+    # Finalize and persist privacy-preserving analytics buckets and summary
+    analytics_manager.finalize_session(db, session_id)
 
     updated_doc = db.sessions.find_one({"_id": session_id})
     updated_doc["id"] = updated_doc.pop("_id")

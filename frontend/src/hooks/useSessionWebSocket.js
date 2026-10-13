@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+﻿import { useEffect, useRef, useState, useCallback } from 'react'
 import { WS_BASE_URL } from '../config/api.js'
 
 export const MAX_RECONNECT_ATTEMPTS = 5
@@ -276,6 +276,96 @@ export function useSessionWebSocket(sessionId, token, enabled = true, WebSocketC
     }
   }, [])
 
+  const sendChatMessage = useCallback((content) => {
+    if (
+      wsRef.current &&
+      wsRef.current.readyState === 1 &&
+      content &&
+      typeof content === 'string' &&
+      content.trim().length > 0 &&
+      !isSessionTerminatedRef.current
+    ) {
+      wsRef.current.send(JSON.stringify({
+        type: 'chat_message',
+        content: content.trim()
+      }))
+      return true
+    }
+    return false
+  }, [])
+
+  const sendSignal = useCallback((targetId, signal) => {
+    if (
+      wsRef.current &&
+      wsRef.current.readyState === 1 &&
+      targetId &&
+      signal &&
+      !isSessionTerminatedRef.current
+    ) {
+      wsRef.current.send(JSON.stringify({
+        type: 'webrtc_signal',
+        target_id: targetId,
+        signal
+      }))
+      return true
+    }
+    return false
+  }, [])
+
+  const sendScreenshareStarted = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === 1 && !isSessionTerminatedRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'screenshare_started' }))
+      return true
+    }
+    return false
+  }, [])
+
+  const sendScreenshareStopped = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === 1 && !isSessionTerminatedRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'screenshare_stopped' }))
+      return true
+    }
+    return false
+  }, [])
+
+  const sendVoiceJoin = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === 1 && !isSessionTerminatedRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'voice_join' }))
+      return true
+    }
+    return false
+  }, [])
+
+  const sendVoiceLeave = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === 1 && !isSessionTerminatedRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'voice_leave' }))
+      return true
+    }
+    return false
+  }, [])
+
+  const sendVoiceStatus = useCallback((isMuted, isSpeaking = false) => {
+    if (wsRef.current && wsRef.current.readyState === 1 && !isSessionTerminatedRef.current) {
+      wsRef.current.send(JSON.stringify({
+        type: 'voice_status',
+        payload: {
+          is_muted: Boolean(isMuted),
+          is_speaking: Boolean(isSpeaking)
+        }
+      }))
+      return true
+    }
+    return false
+  }, [])
+
+  const requestPeers = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === 1 && !isSessionTerminatedRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'get_peers' }))
+      return true
+    }
+    return false
+  }, [])
+
   const isConnected = connectionState === 'connected'
 
   return {
@@ -285,6 +375,14 @@ export function useSessionWebSocket(sessionId, token, enabled = true, WebSocketC
     retryCount,
     error,
     sendPing,
-    sendBehaviourUpdate
+    sendBehaviourUpdate,
+    sendChatMessage,
+    sendSignal,
+    sendScreenshareStarted,
+    sendScreenshareStopped,
+    sendVoiceJoin,
+    sendVoiceLeave,
+    sendVoiceStatus,
+    requestPeers
   }
 }

@@ -1,9 +1,10 @@
-from typing import List
+﻿from typing import List
 from fastapi import APIRouter, Depends
 from app.api.deps import get_db, require_teacher, get_current_user
 from app.schemas.classroom import ClassroomCreate, ClassroomUpdate, ClassroomResponse
 from app.schemas.session import SessionResponse
 from app.schemas.participant import ActiveSessionLookupResponse
+from app.schemas.analytics import TeacherSessionHistoryItem
 from app.services.classroom_service import (
     create_classroom,
     get_classrooms_for_teacher,
@@ -13,6 +14,7 @@ from app.services.classroom_service import (
 )
 from app.services.session_service import list_classroom_sessions
 from app.services.participant_service import lookup_active_session_by_code
+from app.services.analytics_service import analytics_manager
 
 router = APIRouter()
 
@@ -68,6 +70,14 @@ def get_sessions(
     current_user: dict = Depends(require_teacher)
 ):
     return list_classroom_sessions(db, classroom_id, current_user["id"])
+
+@router.get("/{classroom_id}/sessions/history", response_model=List[TeacherSessionHistoryItem])
+def get_classroom_sessions_history(
+    classroom_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return analytics_manager.get_classroom_session_history(db, classroom_id, current_user["id"])
 
 @router.get("/code/{join_code}/active-session", response_model=ActiveSessionLookupResponse)
 def lookup_active_session(

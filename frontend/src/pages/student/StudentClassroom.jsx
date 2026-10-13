@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+﻿import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -7,11 +7,18 @@ import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 import { useCamera } from '../../hooks/useCamera'
 import { useFaceLandmarker } from '../../hooks/useFaceLandmarker'
 import { API_BASE_URL } from '../../config/api'
+import { useAuth } from '../../context/AuthContext'
+import ClassroomChat from '../../components/ClassroomChat'
+import { useClassroomVoice } from '../../hooks/useClassroomVoice'
+import { useScreenShare } from '../../hooks/useScreenShare'
+import ClassroomVoiceControls from '../../components/ClassroomVoiceControls'
+import ScreenShareViewer from '../../components/ScreenShareViewer'
 
 export default function StudentClassroom() {
   const { id } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [participation, setParticipation] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -23,11 +30,46 @@ export default function StudentClassroom() {
   const isJoined = participation !== null && participation.status === 'joined'
 
   // Real-time WebSocket connection
-  const { isConnected: isWsConnected, connectionState, retryCount, lastMessage, sendBehaviourUpdate } = useSessionWebSocket(
+  const {
+    isConnected: isWsConnected,
+    connectionState,
+    retryCount,
+    lastMessage,
+    sendBehaviourUpdate,
+    sendChatMessage,
+    sendSignal,
+    sendScreenshareStarted,
+    sendScreenshareStopped,
+    sendVoiceJoin,
+    sendVoiceLeave,
+    sendVoiceStatus
+  } = useSessionWebSocket(
     id,
     token,
     isJoined && !sessionEnded
   )
+
+  const voice = useClassroomVoice({
+    sessionId: id,
+    currentUser: user,
+    isWsConnected,
+    lastMessage,
+    sendSignal,
+    sendVoiceJoin,
+    sendVoiceLeave,
+    sendVoiceStatus
+  })
+
+  const screen = useScreenShare({
+    sessionId: id,
+    currentUser: user,
+    isWsConnected,
+    lastMessage,
+    sendSignal,
+    sendScreenshareStarted,
+    sendScreenshareStopped,
+    isTeacher: false
+  })
 
   // Browser webcam preview (100% local, no raw frames transmitted)
   const {
@@ -246,43 +288,34 @@ export default function StudentClassroom() {
         </Button>
       </div>
 
+      {/* Classroom Voice Controls */}
+      <ClassroomVoiceControls
+        isVoiceJoined={voice.isVoiceJoined}
+        isMuted={voice.isMuted}
+        isSpeaking={voice.isSpeaking}
+        voiceStatus={voice.voiceStatus}
+        voiceError={voice.voiceError}
+        remotePeers={voice.remotePeers}
+        onJoinVoice={voice.joinVoice}
+        onLeaveVoice={voice.leaveVoice}
+        onToggleMute={voice.toggleMute}
+        disabled={!isWsConnected}
+      />
+
       {/* Main Classroom Workspace Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* Lecture Content Panel (Slides/Stream mock) */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-panel-bg border border-neutral-border rounded-lg overflow-hidden shadow-sm">
-            {/* Aspect Ratio slide mock container */}
-            <div className="bg-brand-navy text-white flex flex-col justify-between p-8 aspect-video select-none">
-              <div className="flex justify-between items-center text-xs font-mono text-neutral-400">
-                <span>Lecture Slide #12 &mdash; Fundamental Theorem of Calculus</span>
-                <span>MindMap Player</span>
-              </div>
-              
-              <div className="text-center my-auto space-y-4">
-                <h2 className="text-xl md:text-2xl font-bold font-sans">
-                  {"f(x) = \u222B[a, b] f'(t) dt"}
-                </h2>
-                <p className="text-xs text-neutral-400 max-w-sm mx-auto font-sans leading-relaxed">
-                  The derivative of an integral function yields the original continuous curve parameters. Pay close attention to bounds definition.
-                </p>
-              </div>
-              
-              <div className="flex justify-between items-center text-xs text-neutral-400 pt-4 border-t border-neutral-800">
-                <span>Live Audio Stream: Connected</span>
-                <span>Lecture Mode: Broadcast</span>
-              </div>
-            </div>
 
-            {/* Slide Navigation Mock */}
-            <div className="p-3 bg-neutral-light border-t border-neutral-border flex justify-between items-center text-xs text-text-muted">
-              <span>Synchronized with Instructor's Presentation screen</span>
-              <div className="flex gap-2">
-                <button type="button" className="px-2.5 py-1 bg-panel-bg border border-neutral-border rounded disabled:opacity-50" disabled>&larr; Prev</button>
-                <button type="button" className="px-2.5 py-1 bg-panel-bg border border-neutral-border rounded disabled:opacity-50" disabled>Next &rarr;</button>
-              </div>
-            </div>
-          </div>
+        {/* Lecture Content Panel (Screenshare / Presentation View) */}
+        <div className="lg:col-span-3 space-y-4">
+          <ScreenShareViewer
+            stream={screen.screenStream}
+            isSharing={false}
+            isTeacherSharing={screen.isTeacherSharing}
+            teacherName={screen.teacherSharingName}
+            isTeacher={false}
+            sharingError={screen.sharingError}
+            disabled={!isWsConnected}
+          />
         </div>
 
         {/* Local Diagnostics & Metrics sidebar */}
@@ -298,7 +331,7 @@ export default function StudentClassroom() {
                 </span>
               )}
             </div>
-            
+
             {/* Live camera preview container */}
             <div className="bg-neutral-light border border-neutral-border rounded aspect-video flex flex-col items-center justify-center text-center relative overflow-hidden">
               <video
@@ -378,11 +411,11 @@ export default function StudentClassroom() {
                     <div className="flex items-center justify-between text-[10px] text-text-muted">
                       <span>Local Head Pose (Y / P / R):</span>
                       <span className="font-mono font-semibold text-brand-navy">
-                        {yaw !== null && typeof yaw === 'number' ? `${yaw > 0 ? '+' : ''}${yaw}°` : '--'}
+                        {yaw !== null && typeof yaw === 'number' ? `${yaw > 0 ? '+' : ''}${yaw}Â°` : '--'}
                         {' / '}
-                        {pitch !== null && typeof pitch === 'number' ? `${pitch > 0 ? '+' : ''}${pitch}°` : '--'}
+                        {pitch !== null && typeof pitch === 'number' ? `${pitch > 0 ? '+' : ''}${pitch}Â°` : '--'}
                         {' / '}
-                        {roll !== null && typeof roll === 'number' ? `${roll > 0 ? '+' : ''}${roll}°` : '--'}
+                        {roll !== null && typeof roll === 'number' ? `${roll > 0 ? '+' : ''}${roll}Â°` : '--'}
                       </span>
                     </div>
 
@@ -417,7 +450,7 @@ export default function StudentClassroom() {
                         <span>Head Pose Mean (Y/P/R):</span>
                         <span className="font-mono font-medium text-brand-navy">
                           {temporalData?.headPose?.meanYaw !== null && typeof temporalData?.headPose?.meanYaw === 'number'
-                            ? `${temporalData.headPose.meanYaw > 0 ? '+' : ''}${temporalData.headPose.meanYaw.toFixed(1)}° / ${temporalData.headPose.meanPitch > 0 ? '+' : ''}${temporalData.headPose.meanPitch.toFixed(1)}° / ${temporalData.headPose.meanRoll > 0 ? '+' : ''}${temporalData.headPose.meanRoll.toFixed(1)}°`
+                            ? `${temporalData.headPose.meanYaw > 0 ? '+' : ''}${temporalData.headPose.meanYaw.toFixed(1)}Â° / ${temporalData.headPose.meanPitch > 0 ? '+' : ''}${temporalData.headPose.meanPitch.toFixed(1)}Â° / ${temporalData.headPose.meanRoll > 0 ? '+' : ''}${temporalData.headPose.meanRoll.toFixed(1)}Â°`
                             : '--'}
                         </span>
                       </div>
@@ -430,7 +463,7 @@ export default function StudentClassroom() {
                             : '--'}
                           {' / '}
                           {temporalData?.headPose?.angularDisplacement !== null && typeof temporalData?.headPose?.angularDisplacement === 'number'
-                            ? `${temporalData.headPose.angularDisplacement.toFixed(1)}°`
+                            ? `${temporalData.headPose.angularDisplacement.toFixed(1)}Â°`
                             : '--'}
                         </span>
                       </div>
@@ -510,7 +543,7 @@ export default function StudentClassroom() {
                             : '--'}
                           {' / '}
                           {baselineData?.baseline?.headPose?.yaw !== null && typeof baselineData?.baseline?.headPose?.yaw === 'number'
-                            ? `${baselineData.baseline.headPose.yaw.toFixed(0)}°`
+                            ? `${baselineData.baseline.headPose.yaw.toFixed(0)}Â°`
                             : '--'}
                         </span>
                       </div>
@@ -524,7 +557,7 @@ export default function StudentClassroom() {
                               {' | '}
                               Gaze: {baselineData?.deviation?.gaze !== null && typeof baselineData?.deviation?.gaze === 'number' ? baselineData.deviation.gaze.toFixed(2) : '--'}
                               {' | '}
-                              Pose: {baselineData?.deviation?.headPose !== null && typeof baselineData?.deviation?.headPose === 'number' ? `${baselineData.deviation.headPose.toFixed(1)}°` : '--'}
+                              Pose: {baselineData?.deviation?.headPose !== null && typeof baselineData?.deviation?.headPose === 'number' ? `${baselineData.deviation.headPose.toFixed(1)}Â°` : '--'}
                             </>
                           ) : (
                             <span className="text-text-muted font-normal">Pending calibration</span>
@@ -599,7 +632,7 @@ export default function StudentClassroom() {
           {/* Behavioural coefficients */}
           <div className="card-panel bg-panel-bg space-y-4">
             <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Your Local Metrics</h3>
-            
+
             <div className="space-y-3 font-sans text-xs">
               <div>
                 <div className="flex justify-between mb-1 font-semibold text-text-navy">
@@ -621,11 +654,22 @@ export default function StudentClassroom() {
                 </div>
               </div>
             </div>
-            
+
             <div className="border-t border-neutral-border pt-3 text-[9px] text-text-muted leading-relaxed">
               * Local values represent temporary measurements based on simulated behavioural signals. Only derived numerical values are pushed.
             </div>
           </div>
+
+          {/* Live Classroom Chat */}
+          <ClassroomChat
+            sessionId={id}
+            currentUser={user}
+            isWsConnected={isWsConnected}
+            connectionState={connectionState}
+            retryCount={retryCount}
+            lastMessage={lastMessage}
+            onSendMessage={sendChatMessage}
+          />
         </div>
 
       </div>

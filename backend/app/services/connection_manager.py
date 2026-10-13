@@ -1,4 +1,4 @@
-from typing import Dict, Set, Optional, Any
+﻿from typing import Dict, Set, Optional, Any
 from fastapi import WebSocket
 
 class SessionConnectionManager:
@@ -77,6 +77,52 @@ class SessionConnectionManager:
                     await connection.send_json(message)
                 except Exception:
                     self.remove(connection)
+
+    async def send_to_user(self, session_id: str, target_user_id: str, message: dict) -> bool:
+        """
+        Routes a message directly to a specific user within the active session.
+        Returns True if at least one connection for the user was reached.
+        """
+        connections = self.get_session_connections(session_id)
+        delivered = False
+        for connection in connections:
+            meta = self._connection_metadata.get(connection)
+            if meta and meta.get("user_id") == target_user_id:
+                try:
+                    await connection.send_json(message)
+                    delivered = True
+                except Exception:
+                    self.remove(connection)
+        return delivered
+
+    async def broadcast_to_others(self, session_id: str, exclude_websocket: WebSocket, message: dict) -> None:
+        """
+        Broadcasts a message to all connected peers in the session EXCEPT the sender.
+        """
+        connections = self.get_session_connections(session_id)
+        for connection in connections:
+            if connection != exclude_websocket:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    self.remove(connection)
+
+    def get_session_peers(self, session_id: str) -> list:
+        """
+        Returns a list of unique active peer metadata dicts {user_id, role} in this session room.
+        """
+        connections = self.get_session_connections(session_id)
+        seen = set()
+        peers = []
+        for connection in connections:
+            meta = self._connection_metadata.get(connection)
+            if meta and meta.get("user_id") not in seen:
+                seen.add(meta["user_id"])
+                peers.append({
+                    "user_id": meta["user_id"],
+                    "role": meta.get("role")
+                })
+        return peers
 
 # Global singleton instance for the application
 manager = SessionConnectionManager()

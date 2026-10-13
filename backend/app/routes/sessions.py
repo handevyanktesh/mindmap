@@ -1,8 +1,17 @@
-from typing import List
+﻿from typing import List
 from fastapi import APIRouter, Depends
 from app.api.deps import get_db, require_teacher, require_student
 from app.schemas.session import SessionCreate, SessionResponse, SessionSummaryResponse
 from app.schemas.participant import ParticipantResponse, ParticipantDetailResponse
+from app.schemas.analytics import (
+    SessionAnalyticsSummaryResponse,
+    AnalyticsBucketResponse,
+    TeacherSessionHistoryItem
+)
+from app.schemas.student import (
+    StudentSessionHistoryItem,
+    StudentSessionDetailResponse
+)
 from app.services.session_service import (
     create_session,
     get_session,
@@ -16,9 +25,43 @@ from app.services.participant_service import (
     get_student_participation,
     list_session_participants
 )
+from app.services.student_service import (
+    get_student_session_history,
+    get_student_session_details
+)
 from app.services.connection_manager import manager
+from app.services.analytics_service import analytics_manager
 
 router = APIRouter()
+
+@router.get("/teacher/history", response_model=List[TeacherSessionHistoryItem])
+def get_teacher_history(
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return analytics_manager.get_teacher_session_history(db, current_user["id"])
+
+@router.get("/history", response_model=List[TeacherSessionHistoryItem])
+def get_history_alias(
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return analytics_manager.get_teacher_session_history(db, current_user["id"])
+
+@router.get("/student/history", response_model=List[StudentSessionHistoryItem])
+def get_student_history(
+    db = Depends(get_db),
+    current_user: dict = Depends(require_student)
+):
+    return get_student_session_history(db, current_user["id"])
+
+@router.get("/{session_id}/student-details", response_model=StudentSessionDetailResponse)
+def get_session_student_details(
+    session_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_student)
+):
+    return get_student_session_details(db, session_id, current_user["id"])
 
 @router.post("/", response_model=SessionResponse)
 def create(
@@ -64,6 +107,22 @@ def summary(
     current_user: dict = Depends(require_teacher)
 ):
     return get_session_summary(db, session_id, current_user["id"])
+
+@router.get("/{session_id}/analytics/summary", response_model=SessionAnalyticsSummaryResponse)
+def get_analytics_summary(
+    session_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return analytics_manager.get_summary(db, session_id, current_user["id"])
+
+@router.get("/{session_id}/analytics/buckets", response_model=List[AnalyticsBucketResponse])
+def get_analytics_buckets(
+    session_id: str,
+    db = Depends(get_db),
+    current_user: dict = Depends(require_teacher)
+):
+    return analytics_manager.get_buckets(db, session_id, current_user["id"])
 
 # --- Student Participation Routes ---
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+﻿import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -7,11 +7,18 @@ import StatusBadge from '../../components/StatusBadge'
 import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 import { calculateClassroomAggregation, isStudentReporting } from '../../features/classroom/classroomAggregation'
 import { API_BASE_URL } from '../../config/api'
+import { useAuth } from '../../context/AuthContext'
+import ClassroomChat from '../../components/ClassroomChat'
+import { useClassroomVoice } from '../../hooks/useClassroomVoice'
+import { useScreenShare } from '../../hooks/useScreenShare'
+import ClassroomVoiceControls from '../../components/ClassroomVoiceControls'
+import ScreenShareViewer from '../../components/ScreenShareViewer'
 
 export default function TeacherClassroom() {
   const { id } = useParams()
   const navigate = useNavigate()
-  
+  const { user } = useAuth()
+
   const [classroom, setClassroom] = useState(null)
   const [sessions, setSessions] = useState([])
   const [participants, setParticipants] = useState([])
@@ -53,7 +60,7 @@ export default function TeacherClassroom() {
       const classRes = await fetch(`${API_BASE_URL}/api/classrooms/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      
+
       if (classRes.status === 401) {
         navigate('/login')
         return
@@ -241,12 +248,45 @@ export default function TeacherClassroom() {
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   const token = localStorage.getItem('token')
-  const isWsActive = Boolean(activeSession && activeSession.status === 'active')
-  const { connectionState, retryCount, lastMessage } = useSessionWebSocket(
+  const {
+    isConnected: isWsConnected,
+    connectionState,
+    retryCount,
+    lastMessage,
+    sendChatMessage,
+    sendSignal,
+    sendScreenshareStarted,
+    sendScreenshareStopped,
+    sendVoiceJoin,
+    sendVoiceLeave,
+    sendVoiceStatus
+  } = useSessionWebSocket(
     activeSession?.id,
     token,
-    isWsActive
+    Boolean(activeSession?.id)
   )
+
+  const voice = useClassroomVoice({
+    sessionId: activeSession?.id,
+    currentUser: user,
+    isWsConnected,
+    lastMessage,
+    sendSignal,
+    sendVoiceJoin,
+    sendVoiceLeave,
+    sendVoiceStatus
+  })
+
+  const screen = useScreenShare({
+    sessionId: activeSession?.id,
+    currentUser: user,
+    isWsConnected,
+    lastMessage,
+    sendSignal,
+    sendScreenshareStarted,
+    sendScreenshareStopped,
+    isTeacher: true
+  })
 
   // Ingest incoming student_behaviour_telemetry
   useEffect(() => {
@@ -412,7 +452,7 @@ export default function TeacherClassroom() {
           )}
           <div>
             <h2 className="font-bold text-brand-navy text-base">
-              {currentSession ? `${courseTitle} — ${currentSession.title}` : courseTitle}
+              {currentSession ? `${courseTitle} â€” ${currentSession.title}` : courseTitle}
             </h2>
             <div className="text-[10px] text-text-muted mt-0.5 space-x-2">
               <span>Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{classroom?.join_code}</code></span>
@@ -611,6 +651,36 @@ export default function TeacherClassroom() {
         </div>
       </div>
 
+      {/* Live Classroom Media: Voice & Screen Sharing Controls */}
+      {activeSession && (
+        <div className="space-y-3">
+          <ClassroomVoiceControls
+            isVoiceJoined={voice.isVoiceJoined}
+            isMuted={voice.isMuted}
+            isSpeaking={voice.isSpeaking}
+            voiceStatus={voice.voiceStatus}
+            voiceError={voice.voiceError}
+            remotePeers={voice.remotePeers}
+            onJoinVoice={voice.joinVoice}
+            onLeaveVoice={voice.leaveVoice}
+            onToggleMute={voice.toggleMute}
+            disabled={!isWsConnected}
+          />
+
+          <ScreenShareViewer
+            stream={screen.screenStream}
+            isSharing={screen.isSharing}
+            isTeacherSharing={false}
+            teacherName={user?.name || 'You'}
+            isTeacher={true}
+            onStartSharing={screen.startScreenShare}
+            onStopSharing={screen.stopScreenShare}
+            sharingError={screen.sharingError}
+            disabled={!isWsConnected}
+          />
+        </div>
+      )}
+
       {/* Real-time Classroom Aggregates Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="card-panel text-center py-3">
@@ -625,7 +695,7 @@ export default function TeacherClassroom() {
         <div className="card-panel text-center py-3">
           <span className="text-[10px] uppercase font-mono text-text-muted">Normal Behaviour</span>
           <div className="text-2xl font-extrabold text-emerald-600 mt-1">
-            {aggregation.normalPercentage !== null ? `${Math.round(aggregation.normalPercentage)}%` : '—'}
+            {aggregation.normalPercentage !== null ? `${Math.round(aggregation.normalPercentage)}%` : 'â€”'}
           </div>
           <span className="text-[9px] text-text-muted block mt-0.5">
             {aggregation.counts.normal} student{aggregation.counts.normal === 1 ? '' : 's'}
@@ -635,7 +705,7 @@ export default function TeacherClassroom() {
         <div className="card-panel text-center py-3">
           <span className="text-[10px] uppercase font-mono text-text-muted">Reduced Engagement</span>
           <div className="text-2xl font-extrabold text-amber-600 mt-1">
-            {aggregation.reducedPercentage !== null ? `${Math.round(aggregation.reducedPercentage)}%` : '—'}
+            {aggregation.reducedPercentage !== null ? `${Math.round(aggregation.reducedPercentage)}%` : 'â€”'}
           </div>
           <span className="text-[9px] text-text-muted block mt-0.5">
             {aggregation.counts.reduced} student{aggregation.counts.reduced === 1 ? '' : 's'}
@@ -645,7 +715,7 @@ export default function TeacherClassroom() {
         <div className="card-panel text-center py-3">
           <span className="text-[10px] uppercase font-mono text-text-muted">Elevated Confusion</span>
           <div className="text-2xl font-extrabold text-warning-600 mt-1">
-            {aggregation.elevatedConfusionPercentage !== null ? `${Math.round(aggregation.elevatedConfusionPercentage)}%` : '—'}
+            {aggregation.elevatedConfusionPercentage !== null ? `${Math.round(aggregation.elevatedConfusionPercentage)}%` : 'â€”'}
           </div>
           <span className="text-[9px] text-text-muted block mt-0.5">
             {aggregation.counts.elevatedConfusion} student{aggregation.counts.elevatedConfusion === 1 ? '' : 's'}
@@ -655,7 +725,7 @@ export default function TeacherClassroom() {
         <div className="card-panel text-center py-3 col-span-2 sm:col-span-1">
           <span className="text-[10px] uppercase font-mono text-text-muted">Mean Confidence</span>
           <div className="text-2xl font-extrabold text-primary-600 mt-1">
-            {aggregation.meanConfidence !== null ? aggregation.meanConfidence.toFixed(2) : '—'}
+            {aggregation.meanConfidence !== null ? aggregation.meanConfidence.toFixed(2) : 'â€”'}
           </div>
           <span className="text-[9px] text-text-muted block mt-0.5">Evidence Quality</span>
         </div>
@@ -738,7 +808,7 @@ export default function TeacherClassroom() {
                             )}
                           </>
                         ) : (
-                          <span className="text-text-muted text-[11px]">—</span>
+                          <span className="text-text-muted text-[11px]">â€”</span>
                         )}
                       </td>
 
@@ -756,7 +826,7 @@ export default function TeacherClassroom() {
                             )}
                           </>
                         ) : (
-                          <span className="text-text-muted text-[11px]">—</span>
+                          <span className="text-text-muted text-[11px]">â€”</span>
                         )}
                       </td>
 
@@ -764,7 +834,7 @@ export default function TeacherClassroom() {
                         {isParticipantActive && reporting && typeof telemetry?.confidence === 'number' ? (
                           <span className="text-text-muted">{telemetry.confidence.toFixed(2)}</span>
                         ) : (
-                          <span className="text-text-muted">—</span>
+                          <span className="text-text-muted">â€”</span>
                         )}
                       </td>
 
@@ -787,6 +857,21 @@ export default function TeacherClassroom() {
           </div>
         )}
       </div>
+
+      {/* Live Classroom Chat */}
+      {activeSession && (
+        <div className="space-y-2">
+          <ClassroomChat
+            sessionId={activeSession.id}
+            currentUser={user}
+            isWsConnected={isWsConnected}
+            connectionState={connectionState}
+            retryCount={retryCount}
+            lastMessage={lastMessage}
+            onSendMessage={sendChatMessage}
+          />
+        </div>
+      )}
 
     </PageContainer>
   )

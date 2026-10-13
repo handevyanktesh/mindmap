@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -18,6 +18,9 @@ export default function SessionReport() {
   const [error, setError] = useState('')
   const [summaryData, setSummaryData] = useState(null)
   const [classroomData, setClassroomData] = useState(null)
+  const [telemetrySource, setTelemetrySource] = useState('unavailable') // 'persisted', 'live_cache', 'unavailable'
+  const [dataQuality, setDataQuality] = useState('no_telemetry')
+  const [bucketStats, setBucketStats] = useState({ totalBuckets: 0, validBuckets: 0 })
 
   useEffect(() => {
     let isMounted = true
@@ -30,7 +33,7 @@ export default function SessionReport() {
           return
         }
 
-        // 1. Fetch REST session summary from backend
+        // 1. Fetch REST session summary and participant roster
         const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/summary`, {
           headers: { Authorization: `Bearer ${token}` }
         })
@@ -54,7 +57,7 @@ export default function SessionReport() {
         const data = await res.json()
         if (!isMounted) return
 
-        // 2. Fetch classroom details for join code & course name if available
+        // 2. Fetch classroom details for join code
         if (data.classroom_id) {
           try {
             const classRes = await fetch(`${API_BASE_URL}/api/classrooms/${data.classroom_id}`, {
@@ -64,29 +67,118 @@ export default function SessionReport() {
               const cData = await classRes.json()
               if (isMounted) setClassroomData(cData)
             }
-          } catch (_) {
-            // Classroom details are non-blocking
+          } catch {
+            // Non-blocking
           }
         }
 
-        // 3. Check for in-memory / session-cached live telemetry accumulated by teacher
-        let cachedTelemetry = null
+        // 3. Attempt to fetch persisted analytics summary & 1-minute buckets from backend
+        let persistedSummary = null
+        let persistedBuckets = []
+
         try {
-          const rawCached = sessionStorage.getItem(`mindmap_session_summary_${sessionId}`)
-          if (rawCached) {
-            cachedTelemetry = JSON.parse(rawCached)
+          const [analyticsRes, bucketsRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/sessions/${sessionId}/analytics/summary`, {
+              headers: { Authorization: `Bearer ${token}` }
+            }),
+            fetch(`${API_BASE_URL}/api/sessions/${sessionId}/analytics/buckets`, {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+          ])
+
+          if (analyticsRes.ok) {
+            persistedSummary = await analyticsRes.json()
           }
-        } catch (_) {
-          // Ignore cache parse failure
+          if (bucketsRes.ok) {
+            persistedBuckets = await bucketsRes.json()
+          }
+        } catch {
+          // Fall back gracefully if analytics endpoints are unreachable
         }
 
-        // 4. Calculate integrated session summary
-        const calculated = calculateSessionSummary(data, data.participants || [], cachedTelemetry)
-        calculated.classroomName = data.classroom_name || 'Classroom'
-        calculated.classroomId = data.classroom_id
+        // 4. Resolve telemetry data source (persisted MongoDB vs live cache vs unavailable)
+        let resolvedSummary = null
+        let resolvedSource = 'unavailable'
+        let resolvedQuality = 'no_telemetry'
+        let totalB = 0
+        let validB = 0
+
+        if (persistedSummary && persistedSummary.telemetry_status === 'persisted' && persistedSummary.total_observations > 0) {
+          resolvedSource = 'persisted'
+          resolvedQuality = persistedSummary.data_quality || 'reliable'
+          totalB = persistedSummary.total_buckets || persistedBuckets.length
+          validB = persistedSummary.valid_buckets || 0
+
+          // Map 1-minute buckets into timeline progression
+          const timelineFromBuckets = (persistedBuckets || [])
+            .filter((b) => b.normal_pct !== null && b.normal_pct !== undefined)
+            .map((b) => ({
+              timestamp_ms: new Date(b.start_time).getTime(),
+              time_label: new Date(b.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              normal_pct: b.normal_pct,
+              reduced_pct: b.reduced_pct,
+              elevated_confusion_pct: b.elevated_confusion_pct,
+              reporting_count: b.reporting_students || 0
+            }))
+
+          const calculated = calculateSessionSummary(data, data.participants || [], {
+            counts: {
+              total_observations: persistedSummary.total_observations,
+              normal_count: persistedSummary.engagement_distribution.normal_count,
+              reduced_count: persistedSummary.engagement_distribution.reduced_count,
+              uncertain_engagement_count: persistedSummary.engagement_distribution.uncertain_count,
+              low_confusion_count: persistedSummary.confusion_distribution.low_count,
+              elevated_confusion_count: persistedSummary.confusion_distribution.elevated_count,
+              uncertain_confusion_count: persistedSummary.confusion_distribution.uncertain_count,
+              confidence_sum: (persistedSummary.mean_confidence || 0) * persistedSummary.total_observations,
+              confidence_count: persistedSummary.total_observations
+            },
+            timeline: timelineFromBuckets
+          })
+
+          // Ensure exact percentage matches from backend
+          calculated.engagementDistribution.normalPct = persistedSummary.engagement_distribution.normal_pct
+          calculated.engagementDistribution.reducedPct = persistedSummary.engagement_distribution.reduced_pct
+          calculated.engagementDistribution.uncertainPct = persistedSummary.engagement_distribution.uncertain_pct
+          calculated.confusionDistribution.lowPct = persistedSummary.confusion_distribution.low_pct
+          calculated.confusionDistribution.elevatedPct = persistedSummary.confusion_distribution.elevated_pct
+          calculated.confusionDistribution.uncertainPct = persistedSummary.confusion_distribution.uncertain_pct
+          calculated.meanConfidence = persistedSummary.mean_confidence
+          calculated.isTelemetryAvailable = true
+
+          resolvedSummary = calculated
+        } else {
+          // Check for in-memory session cache from active teacher session
+          let cachedTelemetry = null
+          try {
+            const rawCached = sessionStorage.getItem(`mindmap_session_summary_${sessionId}`)
+            if (rawCached) {
+              cachedTelemetry = JSON.parse(rawCached)
+            }
+          } catch {
+            // Ignore cache parse failure
+          }
+
+          const calculated = calculateSessionSummary(data, data.participants || [], cachedTelemetry)
+          if (cachedTelemetry && calculated.isTelemetryAvailable) {
+            resolvedSource = 'live_cache'
+            resolvedQuality = 'in_memory'
+          } else {
+            resolvedSource = 'unavailable'
+            resolvedQuality = 'no_telemetry'
+            calculated.isTelemetryAvailable = false
+          }
+          resolvedSummary = calculated
+        }
+
+        resolvedSummary.classroomName = data.classroom_name || 'Classroom'
+        resolvedSummary.classroomId = data.classroom_id
 
         if (isMounted) {
-          setSummaryData(calculated)
+          setSummaryData(resolvedSummary)
+          setTelemetrySource(resolvedSource)
+          setDataQuality(resolvedQuality)
+          setBucketStats({ totalBuckets: totalB, validBuckets: validB })
         }
       } catch (err) {
         if (isMounted) {
@@ -175,11 +267,26 @@ export default function SessionReport() {
       {/* Report Header Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm print:border-none print:shadow-none print:p-0">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] uppercase font-mono font-bold tracking-widest text-primary-700 bg-primary-50 border border-primary-200 px-2 py-0.5 rounded">
               MindMap Session Report
             </span>
             <StatusBadge status="info" label="Concluded Session" />
+            {telemetrySource === 'persisted' && (
+              <span className="text-[10px] uppercase font-mono font-bold tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                Persisted Analytics (MongoDB)
+              </span>
+            )}
+            {telemetrySource === 'live_cache' && (
+              <span className="text-[10px] uppercase font-mono font-bold tracking-widest text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                Live In-Memory Snapshot
+              </span>
+            )}
+            {telemetrySource === 'unavailable' && (
+              <span className="text-[10px] uppercase font-mono font-bold tracking-widest text-text-muted bg-neutral-light border border-neutral-border px-2 py-0.5 rounded">
+                No Persisted Telemetry
+              </span>
+            )}
           </div>
 
           <h1 className="text-xl font-bold text-brand-navy mt-1.5 print:text-2xl">
@@ -203,7 +310,7 @@ export default function SessionReport() {
           </div>
         </div>
 
-        {/* Action Controls (Hidden during print export) */}
+        {/* Action Controls */}
         <div className="flex items-center gap-2 no-print self-end sm:self-auto">
           {classroomId && (
             <Link to={`/teacher/classroom/${classroomId}`}>
@@ -226,6 +333,34 @@ export default function SessionReport() {
         </div>
       </div>
 
+      {/* Persistence & Data Quality Indicator Banner */}
+      {telemetrySource === 'persisted' && (
+        <div className="bg-emerald-50/70 border border-emerald-200/80 rounded p-3 text-xs text-emerald-800 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>
+              <strong>Privacy-Preserving Telemetry Verified:</strong> Derived from genuine client observations aggregated into 1-minute non-biometric time buckets.
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-emerald-700 flex items-center gap-3">
+            <span>Interval: 1 min</span>
+            {bucketStats.totalBuckets > 0 && <span>Buckets: {bucketStats.validBuckets}/{bucketStats.totalBuckets} valid</span>}
+            <span>Quality: {dataQuality}</span>
+          </div>
+        </div>
+      )}
+
+      {telemetrySource === 'unavailable' && (
+        <div className="bg-neutral-light border border-neutral-border rounded p-4 text-xs text-text-muted space-y-1">
+          <p className="font-semibold text-brand-navy">
+            Historical Telemetry Unavailable
+          </p>
+          <p>
+            This session does not contain persisted behavioral telemetry records (it was concluded prior to persistence activation or without active student telemetry reporting). Attendance records and session duration are preserved below.
+          </p>
+        </div>
+      )}
+
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard
@@ -244,57 +379,61 @@ export default function SessionReport() {
 
         <MetricCard
           label="Normal Behaviour"
-          value={engagementDistribution.normalPct !== null ? `${engagementDistribution.normalPct}%` : '—'}
-          sublabel={isTelemetryAvailable ? `${engagementDistribution.normalCount} observations` : 'No live telemetry'}
+          value={engagementDistribution.normalPct !== null ? `${engagementDistribution.normalPct}%` : 'â€”'}
+          sublabel={isTelemetryAvailable ? `${engagementDistribution.normalCount} observations` : 'No telemetry data'}
           valueColor="text-emerald-600"
         />
 
         <MetricCard
           label="Elevated Confusion"
-          value={confusionDistribution.elevatedPct !== null ? `${confusionDistribution.elevatedPct}%` : '—'}
-          sublabel={isTelemetryAvailable ? `${confusionDistribution.elevatedCount} observations` : 'No live telemetry'}
+          value={confusionDistribution.elevatedPct !== null ? `${confusionDistribution.elevatedPct}%` : 'â€”'}
+          sublabel={isTelemetryAvailable ? `${confusionDistribution.elevatedCount} observations` : 'No telemetry data'}
           valueColor={confusionDistribution.elevatedPct > 35 ? 'text-rose-600' : 'text-indigo-600'}
         />
 
         <MetricCard
           label="Mean Confidence"
-          value={meanConfidence !== null ? `${Math.round(meanConfidence * 100)}%` : '—'}
-          sublabel={totalObservations > 0 ? `${totalObservations} samples` : 'Uncalibrated'}
+          value={meanConfidence !== null ? `${Math.round(meanConfidence * 100)}%` : 'â€”'}
+          sublabel={totalObservations > 0 ? `${totalObservations} samples` : 'Unavailable'}
           valueColor="text-brand-navy"
         />
       </div>
 
       {/* Behavioural Distribution Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <DistributionBarChart
-          title="Engagement Distribution"
-          subtitle="Estimated time spent across normal vs reduced engagement states"
-          normalPct={engagementDistribution.normalPct}
-          reducedPct={engagementDistribution.reducedPct}
-          uncertainPct={engagementDistribution.uncertainPct}
-          normalCount={engagementDistribution.normalCount}
-          reducedCount={engagementDistribution.reducedCount}
-          uncertainCount={engagementDistribution.uncertainCount}
-        />
+      {isTelemetryAvailable && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DistributionBarChart
+            title="Engagement Distribution"
+            subtitle="Estimated time spent across normal vs reduced engagement states"
+            normalPct={engagementDistribution.normalPct}
+            reducedPct={engagementDistribution.reducedPct}
+            uncertainPct={engagementDistribution.uncertainPct}
+            normalCount={engagementDistribution.normalCount}
+            reducedCount={engagementDistribution.reducedCount}
+            uncertainCount={engagementDistribution.uncertainCount}
+          />
 
-        <ConfusionDistributionChart
-          title="Confusion Signal Distribution"
-          subtitle="Distribution of facial/gaze indicators associated with confusion"
-          lowPct={confusionDistribution.lowPct}
-          elevatedPct={confusionDistribution.elevatedPct}
-          uncertainPct={confusionDistribution.uncertainPct}
-          lowCount={confusionDistribution.lowCount}
-          elevatedCount={confusionDistribution.elevatedCount}
-          uncertainCount={confusionDistribution.uncertainCount}
-        />
-      </div>
+          <ConfusionDistributionChart
+            title="Confusion Signal Distribution"
+            subtitle="Distribution of facial/gaze indicators associated with confusion"
+            lowPct={confusionDistribution.lowPct}
+            elevatedPct={confusionDistribution.elevatedPct}
+            uncertainPct={confusionDistribution.uncertainPct}
+            lowCount={confusionDistribution.lowCount}
+            elevatedCount={confusionDistribution.elevatedCount}
+            uncertainCount={confusionDistribution.uncertainCount}
+          />
+        </div>
+      )}
 
       {/* Session Behaviour Timeline (If continuous timeline was recorded) */}
-      <TimelineTrendChart
-        timeline={timeline}
-        title="Session Behaviour Trajectory"
-        subtitle="Progression of classroom engagement and confusion throughout the lecture duration"
-      />
+      {isTelemetryAvailable && (
+        <TimelineTrendChart
+          timeline={timeline}
+          title="Session Behaviour Trajectory (1-Minute Intervals)"
+          subtitle="Discrete 1-minute bucket progression of classroom normal behaviour and elevated confusion"
+        />
+      )}
 
       {/* Student Attendance & Participation Roster */}
       <div className="card-panel space-y-3">
@@ -329,29 +468,29 @@ export default function SessionReport() {
                   <th className="py-2.5 px-3 text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-border/60">
-                {attendanceRoster.map((student) => (
-                  <tr key={student.student_id} className="hover:bg-neutral-light/50 transition-colors">
-                    <td className="py-2 px-3 font-medium text-brand-navy">
-                      {student.student_name}
+              <tbody className="divide-y divide-neutral-border text-text-muted">
+                {attendanceRoster.map((p, idx) => (
+                  <tr key={idx} className="hover:bg-neutral-light/35">
+                    <td className="py-2.5 px-3 font-semibold text-brand-navy-light">
+                      {p.student_name}
                     </td>
-                    <td className="py-2 px-3 text-text-muted font-mono text-[11px]">
-                      {student.student_email || '—'}
+                    <td className="py-2.5 px-3 font-mono text-[11px]">
+                      {p.student_email || 'â€”'}
                     </td>
-                    <td className="py-2 px-3 text-text-muted">
-                      {student.joined_at ? new Date(student.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    <td className="py-2.5 px-3 font-mono text-[11px]">
+                      {p.joined_at ? new Date(p.joined_at).toLocaleTimeString() : 'â€”'}
                     </td>
-                    <td className="py-2 px-3 text-text-muted">
-                      {student.left_at ? new Date(student.left_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (endedAt ? new Date(endedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active')}
+                    <td className="py-2.5 px-3 font-mono text-[11px]">
+                      {p.left_at ? new Date(p.left_at).toLocaleTimeString() : (endedAt ? new Date(endedAt).toLocaleTimeString() : 'Active')}
                     </td>
-                    <td className="py-2 px-3 font-mono text-[11px] font-semibold text-brand-navy">
-                      {student.duration_formatted}
+                    <td className="py-2.5 px-3 font-mono text-[11px]">
+                      {p.duration_formatted}
                     </td>
-                    <td className="py-2 px-3 text-right">
-                      {student.status === 'joined' ? (
-                        <StatusBadge status="success" label="Active" />
+                    <td className="py-2.5 px-3 text-right">
+                      {p.status === 'joined' ? (
+                        <StatusBadge status="success" label="Joined" />
                       ) : (
-                        <StatusBadge status="info" label="Completed" />
+                        <StatusBadge status="info" label="Left" />
                       )}
                     </td>
                   </tr>
@@ -362,19 +501,16 @@ export default function SessionReport() {
         )}
       </div>
 
-      {/* Ethical & Scientific Interpretability Disclaimer */}
-      <div className="p-4 bg-neutral-light border border-neutral-border rounded text-[11px] text-text-muted space-y-1.5 leading-relaxed">
-        <div className="flex items-center gap-1.5 font-bold text-brand-navy text-xs">
+      {/* Privacy Notice Banner */}
+      <div className="bg-primary-50/60 border border-primary-200/70 rounded p-4 text-xs text-text-muted space-y-1">
+        <div className="flex items-center gap-1.5 font-semibold text-primary-900">
           <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          <span>Ethical & Scientific Interpretability Notice</span>
+          <span>MindMap Privacy & Ethical Standards</span>
         </div>
-        <p>
-          Behavioural states and confusion signals are heuristic algorithmic approximations derived from non-invasive facial cues (eye aspect ratio, gaze stability, and head pose variance) relative to each student's personal baseline calibration.
-        </p>
-        <p>
-          These indicators are designed to provide aggregated classroom feedback and do <strong>not</strong> constitute medical, cognitive, or definitive assessments of individual student comprehension or learning capability. In accordance with MindMap privacy architecture, all raw video frames and facial landmarks remain strictly local to the student's browser and are never persisted.
+        <p className="leading-relaxed">
+          This report contains aggregate classroom statistics and student attendance records. Individual biometric data, raw webcam streams, facial landmark meshes, Eye Aspect Ratio (EAR), and head-pose telemetry are strictly processed client-side in the student's browser and are never persisted to MongoDB Atlas.
         </p>
       </div>
     </PageContainer>

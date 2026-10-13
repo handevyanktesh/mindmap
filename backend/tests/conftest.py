@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 from pymongo import MongoClient
 
@@ -10,10 +10,10 @@ from app.core.config import settings
 def test_db():
     if not settings.MONGODB_URI:
         pytest.skip("MONGODB_URI not set, cannot run DB tests")
-        
+
     client = MongoClient(settings.MONGODB_URI)
     db = client["mindmap_test_db"]
-    
+
     # Ensure indexes
     db.users.create_index("email", unique=True)
     db.classrooms.create_index("join_code", unique=True)
@@ -30,9 +30,17 @@ def test_db():
         unique=True,
         partialFilterExpression={"status": "joined"}
     )
-    
+    db.session_analytics_buckets.create_index([("session_id", 1), ("bucket_index", 1)], unique=True)
+    db.session_analytics_summaries.create_index("session_id", unique=True)
+    db.session_analytics_summaries.create_index([("teacher_id", 1), ("created_at", -1)])
+    db.session_analytics_summaries.create_index([("classroom_id", 1), ("created_at", -1)])
+    db.reflections.create_index([("student_id", 1), ("created_at", -1)])
+    db.reflections.create_index([("student_id", 1), ("session_id", 1)])
+    db.chat_messages.create_index([("session_id", 1), ("created_at", 1)])
+    db.chat_messages.create_index([("classroom_id", 1), ("created_at", -1)])
+
     yield db
-    
+
     # Clean up after tests
     client.drop_database("mindmap_test_db")
     client.close()

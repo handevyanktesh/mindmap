@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -10,8 +10,13 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [sessionHistory, setSessionHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState('')
+
   useEffect(() => {
     fetchClassrooms()
+    fetchSessionHistory()
   }, [])
 
   const fetchClassrooms = async () => {
@@ -33,11 +38,26 @@ export default function TeacherDashboard() {
     }
   }
 
-  // Mock data for recent sessions (since sessions are not yet implemented)
-  const recentSessions = [
-    { date: '2026-08-19', name: 'Calculus I (Lecture 14)', avgAttention: '82%', peakConfusion: '18%' },
-    { date: '2026-08-18', name: 'Intro to Algorithms (Lecture 2)', avgAttention: '78%', peakConfusion: '22%' },
-  ]
+  const fetchSessionHistory = async () => {
+    setHistoryLoading(true)
+    setHistoryError('')
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${API_BASE_URL}/api/sessions/teacher/history`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch session history')
+      }
+      const data = await response.json()
+      setSessionHistory(data)
+    } catch (err) {
+      console.error(err)
+      setHistoryError('Could not load session history.')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
 
   return (
     <PageContainer size="default" className="space-y-8">
@@ -55,12 +75,12 @@ export default function TeacherDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        
-        {/* Main Class List */}
-        <div className="md:col-span-2 space-y-6">
+
+        {/* Main Class List & Session History */}
+        <div className="md:col-span-2 space-y-8">
           <div className="space-y-4">
             <h3 className="text-h3">Active & Scheduled Classrooms</h3>
-            
+
             {loading ? (
               <p className="text-xs text-text-muted">Loading classrooms...</p>
             ) : error ? (
@@ -103,41 +123,130 @@ export default function TeacherDashboard() {
             )}
           </div>
 
-          {/* Recent History Table */}
+          {/* Genuine Recent History Table */}
           <div className="space-y-4">
-            <h3 className="text-h3">Recent Session Performance Logs <span className="text-[10px] font-normal text-warning-600 bg-warning-50 px-2 py-0.5 rounded ml-2 align-middle">Demo Data</span></h3>
-            <div className="border border-neutral-border rounded overflow-hidden shadow-sm bg-panel-bg">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-neutral-light border-b border-neutral-border font-semibold text-brand-navy">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Session Topic</th>
-                    <th className="p-3">Avg Engagement</th>
-                    <th className="p-3">Peak Confusion Signal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-border text-text-muted">
-                  {recentSessions.map((session, idx) => (
-                    <tr key={idx} className="hover:bg-neutral-light/35">
-                      <td className="p-3 font-mono">{session.date}</td>
-                      <td className="p-3 font-semibold text-brand-navy-light">{session.name}</td>
-                      <td className="p-3 text-primary-600 font-bold">{session.avgAttention}</td>
-                      <td className="p-3 text-warning-600 font-bold">{session.peakConfusion}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-h3">Past Session Performance Logs</h3>
+                <p className="text-xs text-text-muted mt-0.5">Persisted privacy-preserving analytics across concluded sessions</p>
+              </div>
+              <button
+                onClick={fetchSessionHistory}
+                disabled={historyLoading}
+                className="text-xs text-primary-600 hover:text-primary-700 underline disabled:opacity-50"
+              >
+                Refresh
+              </button>
             </div>
+
+            {historyLoading ? (
+              <div className="card-panel text-center py-6">
+                <p className="text-xs text-text-muted">Loading session history...</p>
+              </div>
+            ) : historyError ? (
+              <div className="card-panel text-center py-6 space-y-2">
+                <p className="text-xs text-danger-600">{historyError}</p>
+                <Button variant="secondary" onClick={fetchSessionHistory} className="text-xs py-1 px-3">
+                  Retry
+                </Button>
+              </div>
+            ) : sessionHistory.length === 0 ? (
+              <div className="card-panel text-center py-8 bg-neutral-light/30 border-dashed">
+                <p className="text-sm font-medium text-brand-navy">No completed sessions found</p>
+                <p className="text-xs text-text-muted mt-1">
+                  Start and end a classroom session with connected students to begin generating historical analytics logs.
+                </p>
+              </div>
+            ) : (
+              <div className="border border-neutral-border rounded overflow-x-auto shadow-sm bg-panel-bg">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-neutral-light border-b border-neutral-border font-semibold text-brand-navy">
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Session Topic</th>
+                      <th className="p-3">Classroom</th>
+                      <th className="p-3">Duration</th>
+                      <th className="p-3">Students</th>
+                      <th className="p-3">Avg Engagement</th>
+                      <th className="p-3">Peak Confusion</th>
+                      <th className="p-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-border text-text-muted">
+                    {sessionHistory.map((session) => (
+                      <tr key={session.id} className="hover:bg-neutral-light/35 transition-colors">
+                        <td className="p-3 font-mono text-[11px]">
+                          {new Date(session.started_at || session.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="p-3 font-semibold text-brand-navy-light max-w-[140px] truncate">
+                          {session.title}
+                        </td>
+                        <td className="p-3 text-text-muted max-w-[120px] truncate">
+                          {session.classroom_name}
+                        </td>
+                        <td className="p-3 font-mono text-[11px]">
+                          {session.duration_formatted}
+                        </td>
+                        <td className="p-3">
+                          {session.total_participants}
+                        </td>
+                        <td className="p-3">
+                          {session.telemetry_status === 'persisted' && session.normal_pct !== null ? (
+                            <span className="text-emerald-600 font-bold">{session.normal_pct}%</span>
+                          ) : (
+                            <span className="text-text-muted italic text-[11px]" title="No telemetry was recorded for this session">
+                              Unavailable
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {session.telemetry_status === 'persisted' && session.elevated_confusion_pct !== null ? (
+                            <span className={`font-bold ${session.elevated_confusion_pct > 30 ? 'text-rose-600' : 'text-indigo-600'}`}>
+                              {session.elevated_confusion_pct}%
+                            </span>
+                          ) : (
+                            <span className="text-text-muted italic text-[11px]" title="No telemetry was recorded for this session">
+                              Unavailable
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <Link to={`/teacher/session/${session.id}/report`}>
+                            <Button variant="secondary" className="text-[11px] py-1 px-2.5">
+                              View Report
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Action Panel sidebar */}
         <div className="space-y-6">
           <div className="card-panel bg-neutral-light/50 space-y-4">
-            <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Classroom Integration</h3>
+            <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Privacy & Persistence Policy</h3>
             <p className="text-xs text-text-muted leading-relaxed">
-              Create a classroom session, copy the generated code, and share it with students. Once students authorize camera checks, derived behavioural signals will start feeding into the live analytics graphs.
+              Historical analytics are derived entirely from local browser signals. Webcam video and facial landmarks are never stored or transmitted.
             </p>
+            <div className="text-[11px] text-text-muted space-y-1.5 border-t border-neutral-border pt-3">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>1-minute privacy aggregation</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-primary-500"></span>
+                <span>Zero facial biometric persistence</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
+                <span>90-day bucket retention</span>
+              </div>
+            </div>
           </div>
         </div>
 

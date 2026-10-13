@@ -1,9 +1,11 @@
-import json
+﻿import json
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
 from app.api.deps import get_db, get_user_from_token
 from app.services.connection_manager import manager
+from app.services.analytics_service import analytics_manager
+from app.services.chat_service import save_chat_message
 
 ALLOWED_ENGAGEMENT_STATES = {
     "NORMAL_BEHAVIOUR",
@@ -234,6 +236,221 @@ async def session_websocket_endpoint(
                     }
                 }
                 await manager.send_to_teachers(session_id, telemetry_payload)
+
+                # 10. Record telemetry into privacy-preserving session analytics aggregator
+                analytics_manager.record_telemetry(
+                    session_id=session_id,
+                    classroom_id=curr_session.get("classroom_id", ""),
+                    student_id=user["id"],
+                    engagement_state=engagement_state,
+                    confusion_signal=confusion_signal,
+                    confidence=float(confidence),
+                    timestamp_ms=received_at_ms,
+                    db=db
+                )
+            elif msg_type == "chat_message":
+                # 1. Check active session status in DB
+                curr_session = db.sessions.find_one({"_id": session_id})
+                if not curr_session or curr_session.get("status") != "active":
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Session is not active"
+                    })
+                    continue
+
+                # 2. Check participant / teacher role authorization in DB
+                if role == "student":
+                    active_part = db.participants.find_one({
+                        "session_id": session_id,
+                        "student_id": user["id"],
+                        "status": "joined"
+                    })
+                    if not active_part:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Student is not an active participant in this session"
+                        })
+                        continue
+                elif role == "teacher":
+                    classroom = db.classrooms.find_one({"_id": curr_session.get("classroom_id")})
+                    if not classroom or classroom.get("teacher_id") != user["id"]:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Teacher does not own this classroom"
+                        })
+                        continue
+                else:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Unauthorized role for chat"
+                    })
+                    continue
+
+                # 3. Extract and validate content
+                raw_content = message.get("content")
+                if raw_content is None:
+                    raw_content = message.get("text")
+                if raw_content is None and isinstance(message.get("payload"), dict):
+                    raw_content = message.get("payload").get("content") or message.get("payload").get("text")
+
+                if not isinstance(raw_content, str):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Missing or invalid chat content"
+                    })
+                    continue
+
+                content = raw_content.strip()
+                if not content or len(content) > 500:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Chat message must be between 1 and 500 characters"
+                    })
+                    continue
+
+                # 4. Save message into MongoDB
+                classroom_id = curr_session.get("classroom_id", "")
+                try:
+                    saved_msg = save_chat_message(
+                        db=db,
+                        session_id=session_id,
+                        classroom_id=classroom_id,
+                        sender_id=user["id"],
+                        sender_name=user.get("name", "Participant"),
+                        sender_role=role,
+                        content=content
+                    )
+                except Exception as ex:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Failed to persist chat message: {str(ex)}"
+                    })
+                    continue
+
+                # 5. Broadcast to all active clients in this session room
+                broadcast_payload = {
+                    "type": "chat_message",
+                    "data": {
+                        "id": saved_msg["id"],
+                        "session_id": session_id,
+                        "classroom_id": classroom_id,
+                        "sender_id": user["id"],
+                        "sender_name": user.get("name", "Participant"),
+                        "sender_role": role,
+                        "content": content,
+                        "created_at": saved_msg["created_at"].isoformat()
+                    }
+                }
+                await manager.broadcast_to_session(session_id, broadcast_payload)
+            elif msg_type == "webrtc_signal":
+                # WebRTC Signaling Relay (Peer-to-Peer SDP Offer/Answer/ICE candidates)
+                curr_session = db.sessions.find_one({"_id": session_id})
+                if not curr_session or curr_session.get("status") != "active":
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Session is not active"
+                    })
+                    continue
+
+                target_id = message.get("target_id")
+                if not target_id or not isinstance(target_id, str):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Missing required target_id for WebRTC signaling"
+                    })
+                    continue
+
+                signal_data = message.get("signal") or message.get("payload")
+                if not isinstance(signal_data, dict):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Missing or invalid signal payload"
+                    })
+                    continue
+
+                # Forward signaling payload to target user in this session room only
+                delivered = await manager.send_to_user(session_id, target_id, {
+                    "type": "webrtc_signal",
+                    "sender_id": user["id"],
+                    "sender_name": user.get("name", "Participant"),
+                    "sender_role": role,
+                    "signal": signal_data
+                })
+                if not delivered:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Target peer {target_id} not available in this session"
+                    })
+            elif msg_type == "screenshare_started":
+                # Only teachers may broadcast screen sharing
+                if role != "teacher":
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Only teachers are permitted to broadcast screen sharing"
+                    })
+                    continue
+
+                await manager.broadcast_to_others(session_id, websocket, {
+                    "type": "screenshare_started",
+                    "data": {
+                        "session_id": session_id,
+                        "teacher_id": user["id"],
+                        "teacher_name": user.get("name", "Teacher")
+                    }
+                })
+            elif msg_type == "screenshare_stopped":
+                if role != "teacher":
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Only teachers are permitted to stop screen sharing"
+                    })
+                    continue
+
+                await manager.broadcast_to_others(session_id, websocket, {
+                    "type": "screenshare_stopped",
+                    "data": {
+                        "session_id": session_id,
+                        "teacher_id": user["id"]
+                    }
+                })
+            elif msg_type == "voice_join":
+                await manager.broadcast_to_others(session_id, websocket, {
+                    "type": "voice_peer_joined",
+                    "data": {
+                        "user_id": user["id"],
+                        "user_name": user.get("name", "Participant"),
+                        "role": role
+                    }
+                })
+            elif msg_type == "voice_leave":
+                await manager.broadcast_to_others(session_id, websocket, {
+                    "type": "voice_peer_left",
+                    "data": {
+                        "user_id": user["id"],
+                        "role": role
+                    }
+                })
+            elif msg_type == "voice_status":
+                payload = message.get("payload") or message.get("data") or {}
+                is_muted = bool(payload.get("is_muted", True))
+                is_speaking = bool(payload.get("is_speaking", False))
+
+                await manager.broadcast_to_others(session_id, websocket, {
+                    "type": "voice_status",
+                    "data": {
+                        "user_id": user["id"],
+                        "user_name": user.get("name", "Participant"),
+                        "role": role,
+                        "is_muted": is_muted,
+                        "is_speaking": is_speaking
+                    }
+                })
+            elif msg_type == "get_peers":
+                peers = [p for p in manager.get_session_peers(session_id) if p["user_id"] != user["id"]]
+                await websocket.send_json({
+                    "type": "peer_list",
+                    "peers": peers
+                })
             else:
                 await websocket.send_json({
                     "type": "error",
