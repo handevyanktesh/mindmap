@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -379,21 +379,21 @@ export default function SessionReport() {
 
         <MetricCard
           label="Normal Behaviour"
-          value={engagementDistribution.normalPct !== null ? `${engagementDistribution.normalPct}%` : 'â€”'}
+          value={engagementDistribution.normalPct !== null ? `${engagementDistribution.normalPct}%` : '--'}
           sublabel={isTelemetryAvailable ? `${engagementDistribution.normalCount} observations` : 'No telemetry data'}
           valueColor="text-emerald-600"
         />
 
         <MetricCard
           label="Elevated Confusion"
-          value={confusionDistribution.elevatedPct !== null ? `${confusionDistribution.elevatedPct}%` : 'â€”'}
+          value={confusionDistribution.elevatedPct !== null ? `${confusionDistribution.elevatedPct}%` : '--'}
           sublabel={isTelemetryAvailable ? `${confusionDistribution.elevatedCount} observations` : 'No telemetry data'}
           valueColor={confusionDistribution.elevatedPct > 35 ? 'text-rose-600' : 'text-indigo-600'}
         />
 
         <MetricCard
           label="Mean Confidence"
-          value={meanConfidence !== null ? `${Math.round(meanConfidence * 100)}%` : 'â€”'}
+          value={meanConfidence !== null ? `${Math.round(meanConfidence * 100)}%` : '--'}
           sublabel={totalObservations > 0 ? `${totalObservations} samples` : 'Unavailable'}
           valueColor="text-brand-navy"
         />
@@ -475,10 +475,10 @@ export default function SessionReport() {
                       {p.student_name}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-[11px]">
-                      {p.student_email || 'â€”'}
+                      {p.student_email || '--'}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-[11px]">
-                      {p.joined_at ? new Date(p.joined_at).toLocaleTimeString() : 'â€”'}
+                      {p.joined_at ? new Date(p.joined_at).toLocaleTimeString() : '--'}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-[11px]">
                       {p.left_at ? new Date(p.left_at).toLocaleTimeString() : (endedAt ? new Date(endedAt).toLocaleTimeString() : 'Active')}

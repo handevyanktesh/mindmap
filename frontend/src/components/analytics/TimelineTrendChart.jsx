@@ -36,9 +36,6 @@ export default function TimelineTrendChart({
   const getY = (val) => padTop + plotHeight - ((Math.min(100, Math.max(0, val || 0)) / 100) * plotHeight)
 
   // Build SVG path strings
-  const normalPoints = timeline.map((pt, i) => `${getX(i)},${getY(pt.normal_pct)}`).join(' ')
-  const confusionPoints = timeline.map((pt, i) => `${getX(i)},${getY(pt.elevated_confusion_pct)}`).join(' ')
-
   const normalPath = timeline.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(pt.normal_pct)}`).join(' ')
   const confusionPath = timeline.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(pt.elevated_confusion_pct)}`).join(' ')
 

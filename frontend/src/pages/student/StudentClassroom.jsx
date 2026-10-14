@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
 import StatusBadge from '../../components/StatusBadge'
+import FourLevelIndicator from '../../components/analytics/FourLevelIndicator'
 import { useSessionWebSocket } from '../../hooks/useSessionWebSocket'
 import { useCamera } from '../../hooks/useCamera'
 import { useFaceLandmarker } from '../../hooks/useFaceLandmarker'
@@ -92,7 +93,6 @@ export default function StudentClassroom() {
     pitch,
     roll,
     temporalData,
-    fusedData,
     baselineData,
     inferenceData
   } = useFaceLandmarker(videoRef, cameraStatus === 'active')
@@ -221,16 +221,23 @@ export default function StudentClassroom() {
 
   if (sessionEnded) {
     return (
-      <PageContainer size="small" className="py-12">
-        <div className="card-panel space-y-4 text-center">
+      <PageContainer size="small" className="py-16">
+        <div className="card-panel space-y-4 text-center p-8 rounded-xl shadow-md bg-panel-bg">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-600">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
           <StatusBadge status="info" label="Session Concluded" />
-          <h3 className="text-h3 text-brand-navy">Lecture Session Has Ended</h3>
-          <p className="text-xs text-text-muted leading-relaxed">
+          <h2 className="text-xl font-bold text-brand-navy">Lecture Session Has Ended</h2>
+          <p className="text-xs text-text-muted leading-relaxed max-w-sm mx-auto">
             Your instructor has concluded this session. Camera access and local behavioral processing have been stopped.
           </p>
-          <div className="pt-2">
+          <div className="pt-3">
             <Link to="/student">
-              <Button variant="primary">Return to Student Portal</Button>
+              <Button variant="primary" className="text-xs py-2 px-4">
+                Return to Student Portal
+              </Button>
             </Link>
           </div>
         </div>
@@ -240,19 +247,20 @@ export default function StudentClassroom() {
 
   if (loading) {
     return (
-      <PageContainer size="large" className="py-12 text-center">
-        <p className="text-xs text-text-muted">Connecting and joining session...</p>
+      <PageContainer size="large" className="py-16 text-center">
+        <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-xs text-text-muted">Connecting and entering live classroom...</p>
       </PageContainer>
     )
   }
 
   if (error) {
     return (
-      <PageContainer size="small" className="py-12">
-        <div className="card-panel space-y-4 text-center">
-          <h3 className="text-h3 text-danger-600">Unable to Join Session</h3>
+      <PageContainer size="small" className="py-16">
+        <div className="card-panel space-y-4 text-center p-8 rounded-xl shadow-md bg-panel-bg">
+          <h3 className="text-lg font-bold text-danger-600">Unable to Join Session</h3>
           <p className="text-xs text-text-muted">{error}</p>
-          <div className="pt-2">
+          <div className="pt-3">
             <Link to="/student">
               <Button variant="primary">Return to Student Portal</Button>
             </Link>
@@ -262,33 +270,41 @@ export default function StudentClassroom() {
     )
   }
 
+  // Derive active behavioral indicators from real-time local inferenceData
+  const activeEngagementState = inferenceData?.engagement?.state || 'UNCERTAIN'
+  const activeConfusionState = inferenceData?.confusion?.state || 'UNCERTAIN'
+  const activeEngagementEvidence = inferenceData?.engagement?.evidence ?? null
+  const activeConfusionEvidence = inferenceData?.confusion?.evidence ?? null
+  const activeConfidence = inferenceData?.engagement?.confidence ?? null
+
   return (
-    <PageContainer size="large" className="py-6 space-y-6">
+    <PageContainer size="full" className="py-5 px-4 sm:px-6 lg:px-8 space-y-5">
       {/* Classroom Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-panel-bg border border-neutral-border rounded p-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <StatusBadge status="success" label="Active Participant" />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-panel-bg border border-neutral-border rounded-xl p-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <StatusBadge status="success" label="Active Participant" dot={true} />
           {connectionState === 'connected' && <StatusBadge status="info" label="Realtime Sync" />}
-          {connectionState === 'reconnecting' && <StatusBadge status="warning" label={`Reconnecting (${retryCount}/5)...`} />}
+          {connectionState === 'reconnecting' && <StatusBadge status="warning" label={`Reconnecting (${retryCount}/5)...`} dot={true} />}
           {connectionState === 'failed' && <StatusBadge status="danger" label="Sync Offline" />}
-          <div>
-            <h2 className="font-bold text-brand-navy text-base">{courseTitle}</h2>
-            <p className="text-[10px] text-text-muted">
+          <div className="pl-1">
+            <h1 className="font-bold text-brand-navy text-base leading-tight">{courseTitle}</h1>
+            <p className="text-[11px] text-text-muted font-mono mt-0.5">
               Live Session &bull; Joined at {participation?.joined_at ? new Date(participation.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}
             </p>
           </div>
         </div>
+
         <Button
           variant="secondary"
           onClick={handleLeaveSession}
           disabled={leaving}
-          className="text-xs py-1.5 px-3 border-danger-200 text-danger-600 hover:bg-danger-50"
+          className="text-xs py-1.5 px-3 border-danger-200 text-danger-600 hover:bg-danger-50 shrink-0"
         >
-          {leaving ? 'Leaving...' : 'Exit Room'}
+          {leaving ? 'Leaving...' : 'Exit Classroom'}
         </Button>
       </div>
 
-      {/* Classroom Voice Controls */}
+      {/* Classroom Voice Controls Top-Bar */}
       <ClassroomVoiceControls
         isVoiceJoined={voice.isVoiceJoined}
         isMuted={voice.isMuted}
@@ -302,11 +318,12 @@ export default function StudentClassroom() {
         disabled={!isWsConnected}
       />
 
-      {/* Main Classroom Workspace Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Main Classroom Workspace Grid: 2 Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-        {/* Lecture Content Panel (Screenshare / Presentation View) */}
-        <div className="lg:col-span-3 space-y-4">
+        {/* LEFT COLUMN (8 of 12 cols): Presentation & Real-time Behavioral Indicators */}
+        <div className="lg:col-span-8 space-y-5">
+          {/* Main Lecture Presentation / Screen Share Viewer */}
           <ScreenShareViewer
             stream={screen.screenStream}
             isSharing={false}
@@ -316,24 +333,67 @@ export default function StudentClassroom() {
             sharingError={screen.sharingError}
             disabled={!isWsConnected}
           />
+
+          {/* Student Attention & Confusion Indicators Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-neutral-border pb-2">
+              <div>
+                <h3 className="text-xs font-bold text-brand-navy uppercase tracking-wider">
+                  Live Attention & Confusion Indicators
+                </h3>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  Calculated locally on your machine from head orientation, eye gaze, and facial stability relative to your initial baseline.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0">
+                100% On-Device
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FourLevelIndicator
+                type="attention"
+                state={activeEngagementState}
+                score={activeEngagementEvidence}
+                confidence={activeConfidence}
+                showExplanation={true}
+              />
+
+              <FourLevelIndicator
+                type="confusion"
+                state={activeConfusionState}
+                score={activeConfusionEvidence}
+                confidence={inferenceData?.confusion?.confidence ?? null}
+                showExplanation={true}
+              />
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-lg text-text-muted text-[11px] flex items-center justify-between gap-2">
+              <span>
+                <strong>Privacy Boundary:</strong> Raw webcam video never leaves your browser sandbox. Only derived aggregate integers representing engagement signals are transmitted to the instructor to help pace the lecture.
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Local Diagnostics & Metrics sidebar */}
-        <div className="space-y-6">
-          {/* Self view camera wrapper */}
-          <div className="card-panel bg-panel-bg space-y-4">
-            <div className="flex justify-between items-center border-b border-neutral-border pb-2">
-              <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Self-View Monitor</h3>
-              {cameraStatus === 'active' && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-600">
+        {/* RIGHT COLUMN (4 of 12 cols): Self-View Camera & Classroom Chat */}
+        <div className="lg:col-span-4 space-y-5">
+          {/* Self-View Camera Card */}
+          <div className="card-panel bg-panel-bg p-4 space-y-3 rounded-xl border border-neutral-border shadow-xs">
+            <div className="flex justify-between items-center border-b border-neutral-border pb-2.5">
+              <h3 className="text-xs font-bold text-brand-navy uppercase tracking-wider">Self-View Monitor</h3>
+              {cameraStatus === 'active' ? (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
                   Camera Active
                 </span>
+              ) : (
+                <span className="text-[10px] text-text-muted font-mono">Camera Off</span>
               )}
             </div>
 
-            {/* Live camera preview container */}
-            <div className="bg-neutral-light border border-neutral-border rounded aspect-video flex flex-col items-center justify-center text-center relative overflow-hidden">
+            {/* Live Camera Preview Container */}
+            <div className="bg-slate-900 border border-slate-800 rounded-lg aspect-video flex flex-col items-center justify-center text-center relative overflow-hidden shadow-inner">
               <video
                 ref={videoRef}
                 autoPlay
@@ -343,16 +403,17 @@ export default function StudentClassroom() {
               />
 
               {cameraStatus === 'requesting' && (
-                <div className="p-4 space-y-1">
-                  <p className="text-xs font-semibold text-brand-navy">Starting camera...</p>
-                  <p className="text-[10px] text-text-muted">Waiting for browser permission</p>
+                <div className="p-4 space-y-2 text-white">
+                  <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs font-semibold">Starting camera...</p>
+                  <p className="text-[10px] text-slate-400">Waiting for browser authorization</p>
                 </div>
               )}
 
               {cameraStatus === 'idle' && (
-                <div className="p-4 space-y-2">
-                  <p className="text-xs text-text-muted">Camera access required</p>
-                  <Button variant="secondary" onClick={startCamera} className="text-xs py-1 px-3">
+                <div className="p-4 space-y-2.5 text-center text-slate-300">
+                  <p className="text-xs font-medium">Camera access required for live analysis</p>
+                  <Button variant="primary" onClick={startCamera} className="text-xs py-1.5 px-3">
                     Enable Camera
                   </Button>
                 </div>
@@ -360,7 +421,7 @@ export default function StudentClassroom() {
 
               {cameraStatus === 'error' && (
                 <div className="p-4 space-y-2 text-center">
-                  <p className="text-xs font-semibold text-danger-600">{cameraError || 'Camera unavailable'}</p>
+                  <p className="text-xs font-semibold text-rose-400">{cameraError || 'Camera unavailable'}</p>
                   <Button variant="secondary" onClick={startCamera} className="text-xs py-1 px-3">
                     Retry Permission
                   </Button>
@@ -368,299 +429,46 @@ export default function StudentClassroom() {
               )}
             </div>
 
-            {/* Face Landmarker Pipeline Status Indicator */}
+            {/* Clean Status Badges for Camera & Baseline */}
             {cameraStatus === 'active' && (
-              <div className="space-y-1.5 text-[11px] px-2.5 py-2 bg-neutral-light rounded border border-neutral-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-text-muted">Face Landmarks:</span>
+              <div className="space-y-2 text-xs pt-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-text-muted">Face Detection:</span>
                   {isLandmarkerLoading ? (
-                    <span className="text-amber-600 font-medium">Model loading...</span>
+                    <span className="text-amber-600 font-medium">Loading detector...</span>
                   ) : landmarkerError ? (
-                    <span className="text-danger-600 font-medium">Model error</span>
+                    <span className="text-danger-600 font-medium">Detector error</span>
                   ) : faceDetected ? (
-                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
+                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
                       <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                      Face detected
+                      Aligned
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 font-medium text-neutral-500">
-                      <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></span>
-                      No face detected
-                    </span>
+                    <span className="text-neutral-500 font-medium">Searching for face...</span>
                   )}
                 </div>
 
-                {faceDetected && (
-                  <>
-                    <div className="flex items-center justify-between pt-1 border-t border-neutral-border/60 text-[10px] text-text-muted">
-                      <span>Local EAR (Eye Aspect Ratio):</span>
-                      <span className="font-mono font-semibold text-brand-navy">
-                        {ear !== null && typeof ear === 'number' ? ear.toFixed(3) : '--'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-text-muted">
-                      <span>Local Gaze (X / Y):</span>
-                      <span className="font-mono font-semibold text-brand-navy">
-                        {gazeX !== null && typeof gazeX === 'number' ? gazeX.toFixed(2) : '--'}
-                        {' / '}
-                        {gazeY !== null && typeof gazeY === 'number' ? gazeY.toFixed(2) : '--'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-text-muted">
-                      <span>Local Head Pose (Y / P / R):</span>
-                      <span className="font-mono font-semibold text-brand-navy">
-                        {yaw !== null && typeof yaw === 'number' ? `${yaw > 0 ? '+' : ''}${yaw}Â°` : '--'}
-                        {' / '}
-                        {pitch !== null && typeof pitch === 'number' ? `${pitch > 0 ? '+' : ''}${pitch}Â°` : '--'}
-                        {' / '}
-                        {roll !== null && typeof roll === 'number' ? `${roll > 0 ? '+' : ''}${roll}Â°` : '--'}
-                      </span>
-                    </div>
-
-                    {/* Windowed Temporal Analysis (5.0s rolling window) */}
-                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
-                        <span>Temporal Window (5.0s):</span>
-                        <span className="font-mono text-brand-navy">
-                          {temporalData?.sampleCount ?? 0} frames ({((temporalData?.windowSpanMs ?? 0) / 1000).toFixed(1)}s)
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>EAR Mean &plusmn; Std:</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {temporalData?.ear?.mean !== null && typeof temporalData?.ear?.mean === 'number'
-                            ? `${temporalData.ear.mean.toFixed(3)} \u00B1 ${temporalData.ear.std?.toFixed(3) ?? '0.000'}`
-                            : '--'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Gaze Mean (X / Y):</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {temporalData?.gaze?.meanX !== null && typeof temporalData?.gaze?.meanX === 'number'
-                            ? `${temporalData.gaze.meanX.toFixed(2)} / ${temporalData.gaze.meanY?.toFixed(2)}`
-                            : '--'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Head Pose Mean (Y/P/R):</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {temporalData?.headPose?.meanYaw !== null && typeof temporalData?.headPose?.meanYaw === 'number'
-                            ? `${temporalData.headPose.meanYaw > 0 ? '+' : ''}${temporalData.headPose.meanYaw.toFixed(1)}Â° / ${temporalData.headPose.meanPitch > 0 ? '+' : ''}${temporalData.headPose.meanPitch.toFixed(1)}Â° / ${temporalData.headPose.meanRoll > 0 ? '+' : ''}${temporalData.headPose.meanRoll.toFixed(1)}Â°`
-                            : '--'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Displacement (Gaze / Pose):</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {temporalData?.gaze?.displacement !== null && typeof temporalData?.gaze?.displacement === 'number'
-                            ? temporalData.gaze.displacement.toFixed(2)
-                            : '--'}
-                          {' / '}
-                          {temporalData?.headPose?.angularDisplacement !== null && typeof temporalData?.headPose?.angularDisplacement === 'number'
-                            ? `${temporalData.headPose.angularDisplacement.toFixed(1)}Â°`
-                            : '--'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Multimodal Signal Fusion (Quality-Gated Bounded Representation) */}
-                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
-                        <span>Multimodal Signal:</span>
-                        <span className="font-mono text-brand-navy">
-                          {fusedData?.valid ? (
-                            <span className="text-emerald-600 font-semibold">Valid</span>
-                          ) : (
-                            <span className="text-neutral-500">Unavailable</span>
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Modality Coverage:</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {fusedData?.modalityCoverage?.availableCount ?? 0} / {fusedData?.modalityCoverage?.totalCount ?? 3}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Fusion Output:</span>
-                        <span className="font-mono font-semibold text-brand-navy">
-                          {fusedData?.fusedSignal !== null && typeof fusedData?.fusedSignal === 'number'
-                            ? fusedData.fusedSignal.toFixed(3)
-                            : '--'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Contributions (E / G / P):</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {fusedData?.contributions?.ear !== null && typeof fusedData?.contributions?.ear === 'number'
-                            ? fusedData.contributions.ear.toFixed(2)
-                            : '--'}
-                          {' / '}
-                          {fusedData?.contributions?.gaze !== null && typeof fusedData?.contributions?.gaze === 'number'
-                            ? fusedData.contributions.gaze.toFixed(2)
-                            : '--'}
-                          {' / '}
-                          {fusedData?.contributions?.headPose !== null && typeof fusedData?.contributions?.headPose === 'number'
-                            ? fusedData.contributions.headPose.toFixed(2)
-                            : '--'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Personal Behavioural Baseline (Quality-Gated Reference) */}
-                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
-                        <span>Personal Baseline:</span>
-                        <span className="font-mono text-brand-navy">
-                          {baselineData?.ready ? (
-                            <span className="text-emerald-600 font-semibold">Ready</span>
-                          ) : (
-                            <span className="text-amber-600 font-medium">
-                              Calibrating ({baselineData?.warmupProgress?.current ?? 0}/{baselineData?.warmupProgress?.target ?? 30})
-                            </span>
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Baseline Ref (E / G / P):</span>
-                        <span className="font-mono font-medium text-brand-navy">
-                          {baselineData?.baseline?.ear?.value !== null && typeof baselineData?.baseline?.ear?.value === 'number'
-                            ? baselineData.baseline.ear.value.toFixed(2)
-                            : '--'}
-                          {' / '}
-                          {baselineData?.baseline?.gaze?.x !== null && typeof baselineData?.baseline?.gaze?.x === 'number'
-                            ? `${baselineData.baseline.gaze.x.toFixed(2)},${baselineData.baseline.gaze.y.toFixed(2)}`
-                            : '--'}
-                          {' / '}
-                          {baselineData?.baseline?.headPose?.yaw !== null && typeof baselineData?.baseline?.headPose?.yaw === 'number'
-                            ? `${baselineData.baseline.headPose.yaw.toFixed(0)}Â°`
-                            : '--'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Behavioural Deviation:</span>
-                        <span className="font-mono font-semibold text-brand-navy">
-                          {baselineData?.ready ? (
-                            <>
-                              EAR: {baselineData?.deviation?.ear !== null && typeof baselineData?.deviation?.ear === 'number' ? baselineData.deviation.ear.toFixed(3) : '--'}
-                              {' | '}
-                              Gaze: {baselineData?.deviation?.gaze !== null && typeof baselineData?.deviation?.gaze === 'number' ? baselineData.deviation.gaze.toFixed(2) : '--'}
-                              {' | '}
-                              Pose: {baselineData?.deviation?.headPose !== null && typeof baselineData?.deviation?.headPose === 'number' ? `${baselineData.deviation.headPose.toFixed(1)}Â°` : '--'}
-                            </>
-                          ) : (
-                            <span className="text-text-muted font-normal">Pending calibration</span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Behavioural Assessment (Interpretable Inference) */}
-                    <div className="pt-2 border-t border-neutral-border/60 space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-semibold text-text-muted">
-                        <span>Behavioural Assessment:</span>
-                        <span className="font-mono text-brand-navy text-[10px]">
-                          {inferenceData?.quality?.rating || 'Limited'} Evidence
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Engagement-related:</span>
-                        <span className="font-mono font-semibold text-brand-navy">
-                          {inferenceData?.engagement?.state === 'NORMAL_BEHAVIOUR' && (
-                            <span className="text-emerald-600">Normal behaviour</span>
-                          )}
-                          {inferenceData?.engagement?.state === 'REDUCED_ENGAGEMENT_LIKE' && (
-                            <span className="text-amber-600">Reduced-engagement-like</span>
-                          )}
-                          {inferenceData?.engagement?.state === 'UNCERTAIN' && (
-                            <span className="text-neutral-500">Uncertain</span>
-                          )}
-                          {inferenceData?.engagement?.confidence !== null && typeof inferenceData?.engagement?.confidence === 'number' ? (
-                            <span className="text-[9px] font-normal text-text-muted ml-1">
-                              (conf: {inferenceData.engagement.confidence.toFixed(2)})
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-text-muted">
-                        <span>Confusion-related signal:</span>
-                        <span className="font-mono font-semibold text-brand-navy">
-                          {inferenceData?.confusion?.state === 'LOW' && (
-                            <span className="text-brand-navy">Low</span>
-                          )}
-                          {inferenceData?.confusion?.state === 'ELEVATED' && (
-                            <span className="text-amber-600">Elevated</span>
-                          )}
-                          {inferenceData?.confusion?.state === 'UNCERTAIN' && (
-                            <span className="text-neutral-500">Uncertain</span>
-                          )}
-                          {inferenceData?.confusion?.confidence !== null && typeof inferenceData?.confusion?.confidence === 'number' ? (
-                            <span className="text-[9px] font-normal text-text-muted ml-1">
-                              (conf: {inferenceData.confusion.confidence.toFixed(2)})
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
-
-                      <p className="text-[8.5px] text-text-muted/80 pt-0.5 leading-tight italic">
-                        Observable facial behavioural signals only; not a direct measure of internal mental state.
-                      </p>
-                    </div>
-                  </>
-                )}
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-text-muted">Personal Baseline:</span>
+                  {baselineData?.ready ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                      <svg className="w-3 h-3 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Calibrated
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
+                      Calibrating ({temporalData?.sampleCount ?? 0}/30)
+                    </span>
+                  )}
+                </div>
               </div>
             )}
-
-            <p className="text-[9px] text-text-muted text-center font-sans">
-              Webcam stream is processed 100% locally. Raw video is never transmitted.
-            </p>
           </div>
 
-          {/* Behavioural coefficients */}
-          <div className="card-panel bg-panel-bg space-y-4">
-            <h3 className="text-h3 text-xs uppercase tracking-wider text-text-muted">Your Local Metrics</h3>
-
-            <div className="space-y-3 font-sans text-xs">
-              <div>
-                <div className="flex justify-between mb-1 font-semibold text-text-navy">
-                  <span>Engagement Estimate</span>
-                  <span>92%</span>
-                </div>
-                <div className="w-full bg-neutral-light border border-neutral-border rounded-full h-2">
-                  <div className="bg-primary-600 h-full rounded-full" style={{ width: '92%' }}></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-1 font-semibold text-text-navy">
-                  <span>Confusion-related Signal</span>
-                  <span>5%</span>
-                </div>
-                <div className="w-full bg-neutral-light border border-neutral-border rounded-full h-2">
-                  <div className="bg-emerald-500 h-full rounded-full" style={{ width: '5%' }}></div>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-neutral-border pt-3 text-[9px] text-text-muted leading-relaxed">
-              * Local values represent temporary measurements based on simulated behavioural signals. Only derived numerical values are pushed.
-            </div>
-          </div>
-
-          {/* Live Classroom Chat */}
+          {/* Real-time Classroom Chat */}
           <ClassroomChat
             sessionId={id}
             currentUser={user}
@@ -671,8 +479,32 @@ export default function StudentClassroom() {
             onSendMessage={sendChatMessage}
           />
         </div>
-
       </div>
+
+      {/* Developer Diagnostics Pathway (Hidden / Collapsible at bottom) */}
+      <details className="text-[11px] text-text-muted border-t border-neutral-border pt-4">
+        <summary className="cursor-pointer hover:text-brand-navy font-mono text-[10px] uppercase tracking-wider">
+          &rsaquo; Engineering Diagnostics (Debug Pathway Only)
+        </summary>
+        <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 font-mono text-[10px]">
+          <div className="flex justify-between">
+            <span>EAR / Gaze (X, Y):</span>
+            <span>{ear?.toFixed(3) ?? '--'} / {gazeX?.toFixed(2) ?? '--'}, {gazeY?.toFixed(2) ?? '--'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Head Pose (Y, P, R):</span>
+            <span>{yaw?.toFixed(1) ?? '--'}&deg;, {pitch?.toFixed(1) ?? '--'}&deg;, {roll?.toFixed(1) ?? '--'}&deg;</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Temporal Window (5.0s):</span>
+            <span>{temporalData?.sampleCount ?? 0} frames ({((temporalData?.windowSpanMs ?? 0) / 1000).toFixed(1)}s)</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Evidence Rating:</span>
+            <span>{inferenceData?.quality?.rating || 'Limited'}</span>
+          </div>
+        </div>
+      </details>
     </PageContainer>
   )
 }

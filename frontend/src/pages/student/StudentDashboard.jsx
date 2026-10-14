@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
+import FourLevelIndicator, { mapScoreToFourLevel } from '../../components/analytics/FourLevelIndicator'
 import { useAuth } from '../../context/AuthContext'
 import { API_BASE_URL } from '../../config/api'
 
@@ -194,17 +195,38 @@ export default function StudentDashboard() {
     }
   }
 
+  // Derived Indicators from Recent Session History
+  const latestSessionWithTelemetry = sessionHistory.find(
+    (s) => s.telemetry_status === 'persisted' && s.classroom_normal_pct !== null
+  )
+
+  const attentionScore = latestSessionWithTelemetry?.classroom_normal_pct ?? null
+  const confusionScore = latestSessionWithTelemetry?.classroom_elevated_confusion_pct ?? null
+
+  const attentionLevel = attentionScore !== null ? mapScoreToFourLevel('attention', attentionScore) : 'uncertain'
+  const confusionLevel = confusionScore !== null ? mapScoreToFourLevel('confusion', confusionScore) : 'uncertain'
+
   return (
-    <PageContainer size="default" className="space-y-8">
-      {/* Welcome Banner */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-neutral-border pb-6">
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Student Learning Portal
-          </span>
-          <h2 className="text-h1 mt-1">Welcome back, {user?.name || 'Student'}</h2>
+    <PageContainer size="large" className="py-6 space-y-8">
+      {/* Header and Welcome Action Bar */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-panel-bg border border-neutral-border rounded-xl p-6 shadow-xs">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full border border-primary-200/60 font-mono">
+              Student Learning Portal
+            </span>
+            <span className="text-text-muted text-xs">&bull;</span>
+            <span className="text-text-muted text-xs">Self-Guided Attention & Reflection</span>
+          </div>
+          <h1 className="text-2xl font-bold text-brand-navy tracking-tight">
+            Welcome back, {user?.name || 'Student'}
+          </h1>
+          <p className="text-xs text-text-muted max-w-xl leading-relaxed">
+            Review your classroom attendance history, monitor cohort learning engagement trends, and write private learning reflections.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           <Button
             variant="secondary"
             onClick={() => handleOpenCreateReflection()}
@@ -213,49 +235,127 @@ export default function StudentDashboard() {
             + Write Reflection
           </Button>
           <Link to="/student/join">
-            <Button variant="primary" className="text-xs py-2 px-4">
+            <Button variant="primary" className="text-xs py-2 px-4 shadow-sm">
               Enter Class with Code &rarr;
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Privacy Notice Banner */}
-      <div className="p-4 rounded-md bg-emerald-50/70 border border-emerald-200/80 text-emerald-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-medium">
-        <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          <span>
-            <strong>Privacy & Reflection Guard:</strong> Webcam analysis runs 100% locally in your browser. Reflections and personal goals are strictly private to you and are never shared with instructors or classmates.
+      {/* Primary Behavioral Indicators Section */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1">
+          <div>
+            <h3 className="text-sm font-bold text-brand-navy uppercase tracking-wider">
+              Learning Engagement & Confusion Indicators
+            </h3>
+            <p className="text-xs text-text-muted">
+              {latestSessionWithTelemetry
+                ? `Derived from cohort telemetry in your most recent session: "${latestSessionWithTelemetry.session_title}"`
+                : 'Indicators update automatically when you attend classroom sessions with active telemetry.'}
+            </p>
+          </div>
+          <span className="text-[11px] text-text-muted font-mono">
+            {latestSessionWithTelemetry ? `Session Date: ${new Date(latestSessionWithTelemetry.joined_at).toLocaleDateString()}` : 'Awaiting First Session'}
           </span>
         </div>
-        <Link to="/student/check" className="text-primary-600 hover:underline shrink-0 text-xs">
-          Hardware Check &rarr;
-        </Link>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Indicator 1: Attention-Related Estimate */}
+          <FourLevelIndicator
+            type="attention"
+            level={attentionLevel}
+            score={attentionScore}
+            confidence={attentionScore !== null ? 0.85 : null}
+            showExplanation={true}
+          />
+
+          {/* Indicator 2: Confusion-Related Estimate */}
+          <FourLevelIndicator
+            type="confusion"
+            level={confusionLevel}
+            score={confusionScore}
+            confidence={confusionScore !== null ? 0.82 : null}
+            showExplanation={true}
+          />
+        </div>
+
+        <div className="p-3 bg-slate-100/70 border border-slate-200/80 rounded-lg text-slate-600 text-[11px] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>
+              <strong>Scientific & Privacy Notice:</strong> These estimates represent uncalibrated heuristic behavioural cues relative to baseline, not clinical or cognitive measurements. All webcam video is processed purely on-device and is never stored or transmitted.
+            </span>
+          </div>
+          <Link to="/student/check" className="text-primary-600 font-semibold hover:underline shrink-0">
+            Hardware Diagnostics &rarr;
+          </Link>
+        </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-4 border-b border-neutral-border text-sm">
+      {/* Summary Stat Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="card-panel p-4 bg-panel-bg flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold text-sm">
+            {sessionHistory.length}
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase text-text-muted">Total Sessions</span>
+            <p className="text-sm font-bold text-brand-navy">Attended Lectures</p>
+          </div>
+        </div>
+
+        <div className="card-panel p-4 bg-panel-bg flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+            {reflections.length}
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase text-text-muted">Private Journal</span>
+            <p className="text-sm font-bold text-brand-navy">Reflections Logged</p>
+          </div>
+        </div>
+
+        <div className="card-panel p-4 bg-panel-bg flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs">
+            100%
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase text-text-muted">Privacy Safeguard</span>
+            <p className="text-sm font-bold text-brand-navy">Zero Cloud Video</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-6 border-b border-neutral-border text-sm font-medium">
         <button
           onClick={() => setActiveTab('sessions')}
-          className={`pb-3 font-semibold transition-colors border-b-2 ${
+          className={`pb-3 border-b-2 font-semibold transition-colors flex items-center gap-2 ${
             activeTab === 'sessions'
               ? 'border-primary-600 text-primary-600'
               : 'border-transparent text-text-muted hover:text-brand-navy'
           }`}
         >
-          My Attended Sessions ({sessionHistory.length})
+          <span>Attended Sessions</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+            {sessionHistory.length}
+          </span>
         </button>
+
         <button
           onClick={() => setActiveTab('reflections')}
-          className={`pb-3 font-semibold transition-colors border-b-2 ${
+          className={`pb-3 border-b-2 font-semibold transition-colors flex items-center gap-2 ${
             activeTab === 'reflections'
               ? 'border-primary-600 text-primary-600'
               : 'border-transparent text-text-muted hover:text-brand-navy'
           }`}
         >
-          Private Reflection Journal ({reflections.length})
+          <span>Private Reflections</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+            {reflections.length}
+          </span>
         </button>
       </div>
 
@@ -264,20 +364,21 @@ export default function StudentDashboard() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-h3">Learning Session History</h3>
+              <h3 className="text-sm font-bold text-brand-navy">Learning Session History</h3>
               <p className="text-xs text-text-muted mt-0.5">Classes you attended with attendance duration and classroom cohort trends</p>
             </div>
             <button
               onClick={fetchSessionHistory}
               disabled={historyLoading}
-              className="text-xs text-primary-600 hover:text-primary-700 underline disabled:opacity-50"
+              className="text-xs text-primary-600 hover:text-primary-700 font-medium underline disabled:opacity-50"
             >
               Refresh
             </button>
           </div>
 
           {historyLoading ? (
-            <div className="card-panel text-center py-8">
+            <div className="card-panel text-center py-10">
+              <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <p className="text-xs text-text-muted">Loading learning sessions...</p>
             </div>
           ) : historyError ? (
@@ -288,9 +389,9 @@ export default function StudentDashboard() {
               </Button>
             </div>
           ) : sessionHistory.length === 0 ? (
-            <div className="card-panel text-center py-10 bg-neutral-light/30 border-dashed space-y-3">
-              <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center mx-auto">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="card-panel text-center py-12 bg-slate-50/50 border-dashed space-y-3 rounded-xl">
+              <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mx-auto shadow-xs">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
               </div>
@@ -301,43 +402,44 @@ export default function StudentDashboard() {
                 </p>
               </div>
               <Link to="/student/join">
-                <Button variant="primary" className="text-xs py-1.5 px-3">
+                <Button variant="primary" className="text-xs py-2 px-4 shadow-sm">
                   Join a Live Session Now
                 </Button>
               </Link>
             </div>
           ) : (
-            <div className="border border-neutral-border rounded overflow-x-auto shadow-sm bg-panel-bg">
+            <div className="border border-neutral-border rounded-xl overflow-x-auto shadow-xs bg-panel-bg">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-neutral-light border-b border-neutral-border font-semibold text-brand-navy">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Session Topic</th>
-                    <th className="p-3">Classroom</th>
-                    <th className="p-3">Time Attended</th>
-                    <th className="p-3">Classroom Engagement</th>
-                    <th className="p-3">Reflection</th>
-                    <th className="p-3 text-right">Actions</th>
+                  <tr className="bg-slate-50 border-b border-neutral-border font-semibold text-brand-navy">
+                    <th className="p-3.5">Date</th>
+                    <th className="p-3.5">Session Topic</th>
+                    <th className="p-3.5">Classroom</th>
+                    <th className="p-3.5">Time Attended</th>
+                    <th className="p-3.5">Classroom Engagement</th>
+                    <th className="p-3.5">Reflection</th>
+                    <th className="p-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-border text-text-muted">
                   {sessionHistory.map((s) => (
-                    <tr key={s.session_id} className="hover:bg-neutral-light/35 transition-colors">
-                      <td className="p-3 font-mono text-[11px]">
+                    <tr key={s.session_id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="p-3.5 font-mono text-[11px]">
                         {new Date(s.joined_at).toLocaleDateString()}
                       </td>
-                      <td className="p-3 font-semibold text-brand-navy-light max-w-[150px] truncate">
+                      <td className="p-3.5 font-semibold text-brand-navy max-w-[160px] truncate">
                         {s.session_title}
                       </td>
-                      <td className="p-3 text-text-muted max-w-[120px] truncate">
+                      <td className="p-3.5 text-text-muted max-w-[130px] truncate">
                         {s.classroom_name}
                       </td>
-                      <td className="p-3 font-mono text-[11px]">
+                      <td className="p-3.5 font-mono text-[11px]">
                         {s.participation_duration_formatted}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3.5">
                         {s.telemetry_status === 'persisted' && s.classroom_normal_pct !== null ? (
-                          <span className="text-emerald-600 font-semibold text-[11px]">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
                             {s.classroom_normal_pct}% Class Focus
                           </span>
                         ) : (
@@ -346,10 +448,13 @@ export default function StudentDashboard() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3.5">
                         {s.has_reflection ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            âœ“ Reflected
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <svg className="w-3 h-3 text-emerald-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            Reflected
                           </span>
                         ) : (
                           <button
@@ -360,13 +465,13 @@ export default function StudentDashboard() {
                           </button>
                         )}
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3.5 text-right">
                         <Button
                           variant="secondary"
                           onClick={() => handleOpenDetailModal(s.session_id)}
                           className="text-[11px] py-1 px-2.5"
                         >
-                          Details
+                          View Summary
                         </Button>
                       </td>
                     </tr>
@@ -383,20 +488,23 @@ export default function StudentDashboard() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-h3">Private Reflection Journal</h3>
-              <p className="text-xs text-text-muted mt-0.5">Your personal learning self-assessments, difficulty logs, and actionable goals</p>
+              <h3 className="text-sm font-bold text-brand-navy">Private Learning Reflections</h3>
+              <p className="text-xs text-text-muted mt-0.5">
+                Self-evaluation journal entries strictly private to you. Not visible to professors or peers.
+              </p>
             </div>
             <Button
               variant="primary"
               onClick={() => handleOpenCreateReflection()}
               className="text-xs py-1.5 px-3"
             >
-              + New Journal Entry
+              + New Entry
             </Button>
           </div>
 
           {reflectionsLoading ? (
-            <div className="card-panel text-center py-8">
+            <div className="card-panel text-center py-10">
+              <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <p className="text-xs text-text-muted">Loading reflections...</p>
             </div>
           ) : reflectionsError ? (
@@ -407,78 +515,73 @@ export default function StudentDashboard() {
               </Button>
             </div>
           ) : reflections.length === 0 ? (
-            <div className="card-panel text-center py-10 bg-neutral-light/30 border-dashed space-y-3">
-              <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center mx-auto">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="card-panel text-center py-12 bg-slate-50/50 border-dashed space-y-3 rounded-xl">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               </div>
               <div>
-                <h4 className="font-semibold text-brand-navy text-sm">Your reflection journal is empty</h4>
+                <h4 className="font-semibold text-brand-navy text-sm">No reflection entries written yet</h4>
                 <p className="text-xs text-text-muted mt-1 max-w-md mx-auto">
-                  Take a moment after each class to note what went well, what concepts felt difficult, and your personal goal for next session.
+                  Take a moment after classes to note what went well, what felt difficult, and your personal goal for next session.
                 </p>
               </div>
               <Button
                 variant="primary"
                 onClick={() => handleOpenCreateReflection()}
-                className="text-xs py-1.5 px-3"
+                className="text-xs py-2 px-4 shadow-sm"
               >
                 Write Your First Reflection
               </Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {reflections.map((r) => (
-                <div key={r.id} className="card-panel bg-panel-bg space-y-3.5 border border-neutral-border shadow-sm">
-                  {/* Card Header */}
-                  <div className="flex justify-between items-start gap-2 border-b border-neutral-border pb-2.5">
+              {reflections.map((refl) => (
+                <div key={refl.id} className="card-panel bg-panel-bg p-5 space-y-3.5 rounded-xl border border-neutral-border shadow-xs hover:border-slate-300 transition-all">
+                  <div className="flex justify-between items-start gap-2 border-b border-neutral-border pb-3">
                     <div>
-                      <h4 className="font-bold text-sm text-brand-navy">
-                        {r.session_title || 'General Reflection'}
-                      </h4>
-                      <div className="text-[11px] text-text-muted mt-0.5 space-x-1">
-                        {r.classroom_name && <span>{r.classroom_name} &bull;</span>}
-                        <span>{new Date(r.created_at).toLocaleDateString()}</span>
-                      </div>
+                      <span className="text-[10px] font-mono font-semibold uppercase text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200/60">
+                        {refl.session_title || 'General Reflection'}
+                      </span>
+                      <p className="text-[11px] text-text-muted font-mono mt-1">
+                        {new Date(refl.created_at).toLocaleDateString()} at {new Date(refl.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+
+                    <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => handleOpenEditReflection(r)}
-                        className="text-[11px] text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded hover:bg-primary-50"
+                        onClick={() => handleOpenEditReflection(refl)}
+                        className="text-xs text-primary-600 hover:text-primary-800 p-1"
+                        title="Edit reflection"
                       >
                         Edit
                       </button>
+                      <span className="text-text-muted text-xs">&bull;</span>
                       <button
-                        onClick={() => handleDeleteReflection(r.id)}
-                        className="text-[11px] text-danger-600 hover:text-danger-700 font-medium px-2 py-1 rounded hover:bg-danger-50"
+                        onClick={() => handleDeleteReflection(refl.id)}
+                        className="text-xs text-danger-600 hover:text-danger-800 p-1"
+                        title="Delete reflection"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
 
-                  {/* Reflection Body */}
-                  <div className="space-y-2.5 text-xs">
-                    <div className="bg-emerald-50/60 border-l-2 border-emerald-500 p-2.5 rounded-r">
-                      <span className="font-semibold text-emerald-800 block text-[11px] uppercase tracking-wider mb-0.5">
-                        What Went Well
-                      </span>
-                      <p className="text-brand-navy whitespace-pre-wrap leading-relaxed">{r.what_went_well}</p>
+                  <div className="space-y-2 text-xs leading-relaxed">
+                    <div className="bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-100">
+                      <span className="font-bold text-emerald-900 block text-[11px] mb-0.5">What went well:</span>
+                      <p className="text-slate-700">{refl.what_went_well}</p>
                     </div>
 
-                    <div className="bg-amber-50/60 border-l-2 border-amber-500 p-2.5 rounded-r">
-                      <span className="font-semibold text-amber-800 block text-[11px] uppercase tracking-wider mb-0.5">
-                        What Was Difficult
-                      </span>
-                      <p className="text-brand-navy whitespace-pre-wrap leading-relaxed">{r.what_was_difficult}</p>
+                    <div className="bg-amber-50/60 p-2.5 rounded-lg border border-amber-100">
+                      <span className="font-bold text-amber-900 block text-[11px] mb-0.5">What was challenging:</span>
+                      <p className="text-slate-700">{refl.what_was_difficult}</p>
                     </div>
 
-                    <div className="bg-primary-50/60 border-l-2 border-primary-500 p-2.5 rounded-r">
-                      <span className="font-semibold text-primary-800 block text-[11px] uppercase tracking-wider mb-0.5">
-                        Next-Session Improvement Goal
-                      </span>
-                      <p className="text-brand-navy whitespace-pre-wrap leading-relaxed">{r.improvement_goal}</p>
+                    <div className="bg-blue-50/60 p-2.5 rounded-lg border border-blue-100">
+                      <span className="font-bold text-blue-900 block text-[11px] mb-0.5">Personal Goal:</span>
+                      <p className="text-slate-700">{refl.improvement_goal}</p>
                     </div>
                   </div>
                 </div>
@@ -490,14 +593,14 @@ export default function StudentDashboard() {
 
       {/* MODAL: SESSION DETAILS */}
       {showDetailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-panel-bg border border-neutral-border rounded-lg shadow-xl max-w-lg w-full p-6 space-y-5 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-panel-bg border border-neutral-border rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4 animate-in fade-in duration-150">
             <div className="flex justify-between items-start border-b border-neutral-border pb-3">
               <div>
-                <span className="text-[10px] font-mono uppercase font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
+                <span className="text-[10px] font-mono uppercase font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded border border-primary-200">
                   Session Overview
                 </span>
-                <h3 className="text-h3 text-base mt-1 text-brand-navy">
+                <h3 className="text-h3 text-base mt-1.5 text-brand-navy">
                   {selectedSessionDetail?.session_title || 'Session Details'}
                 </h3>
                 <p className="text-xs text-text-muted mt-0.5">
@@ -506,20 +609,23 @@ export default function StudentDashboard() {
               </div>
               <button
                 onClick={() => setShowDetailModal(false)}
-                className="text-text-muted hover:text-brand-navy text-lg leading-none"
+                className="text-text-muted hover:text-brand-navy text-xl leading-none p-1"
               >
                 &times;
               </button>
             </div>
 
             {detailLoading ? (
-              <p className="text-xs text-text-muted py-6 text-center">Loading details...</p>
+              <div className="py-8 text-center text-xs text-text-muted">
+                <div className="w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                Loading session record...
+              </div>
             ) : selectedSessionDetail?.error ? (
               <p className="text-xs text-danger-600 py-4">{selectedSessionDetail.error}</p>
             ) : (
               <div className="space-y-4 text-xs">
                 {/* Participation info grid */}
-                <div className="grid grid-cols-2 gap-3 bg-neutral-light p-3 rounded">
+                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-lg border border-slate-200">
                   <div>
                     <span className="text-text-muted text-[11px]">Time Attended:</span>
                     <p className="font-mono font-bold text-brand-navy mt-0.5">
@@ -535,7 +641,7 @@ export default function StudentDashboard() {
                   <div>
                     <span className="text-text-muted text-[11px]">Joined At:</span>
                     <p className="font-mono text-brand-navy mt-0.5">
-                      {selectedSessionDetail?.student_joined_at ? new Date(selectedSessionDetail.student_joined_at).toLocaleTimeString() : 'â€”'}
+                      {selectedSessionDetail?.student_joined_at ? new Date(selectedSessionDetail.student_joined_at).toLocaleTimeString() : '--'}
                     </p>
                   </div>
                   <div>
@@ -547,13 +653,13 @@ export default function StudentDashboard() {
                 </div>
 
                 {/* Classroom Cohort Engagement Indicator */}
-                <div className="bg-primary-50/50 border border-primary-200/60 rounded p-3 space-y-1">
+                <div className="bg-primary-50/50 border border-primary-200/60 rounded-lg p-3.5 space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold text-primary-900 text-[11px] uppercase tracking-wider">
+                    <span className="font-semibold text-primary-900 text-[11px] uppercase tracking-wider font-mono">
                       Classroom Cohort Trend (Non-Diagnostic)
                     </span>
                     {selectedSessionDetail?.telemetry_status === 'persisted' && selectedSessionDetail?.classroom_normal_pct !== null ? (
-                      <span className="font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.5 rounded text-[11px]">
+                      <span className="font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full text-[11px] border border-emerald-200">
                         {selectedSessionDetail.classroom_normal_pct}% Normal
                       </span>
                     ) : (
@@ -569,7 +675,7 @@ export default function StudentDashboard() {
                 <div className="border-t border-neutral-border pt-3">
                   <h4 className="font-semibold text-xs text-brand-navy mb-2">My Private Reflection for this Class:</h4>
                   {selectedSessionDetail?.reflection ? (
-                    <div className="bg-neutral-light/60 p-3 rounded space-y-2 text-[11px]">
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 text-[11px]">
                       <div>
                         <strong className="text-emerald-800">Went Well:</strong> {selectedSessionDetail.reflection.what_went_well}
                       </div>
@@ -581,7 +687,7 @@ export default function StudentDashboard() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-3 bg-neutral-light/40 rounded border border-dashed border-neutral-border">
+                    <div className="text-center py-4 bg-slate-50/70 rounded-lg border border-dashed border-neutral-border">
                       <p className="text-text-muted text-xs mb-2">You haven't reflected on this lecture yet.</p>
                       <Button
                         variant="secondary"
@@ -589,7 +695,7 @@ export default function StudentDashboard() {
                           setShowDetailModal(false)
                           handleOpenCreateReflection(selectedSessionDetail?.session_id)
                         }}
-                        className="text-xs py-1 px-3"
+                        className="text-xs py-1.5 px-3"
                       >
                         + Write Reflection Now
                       </Button>
@@ -599,7 +705,7 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            <div className="flex justify-end pt-2 border-t border-neutral-border">
+            <div className="flex justify-end pt-3 border-t border-neutral-border">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)} className="text-xs py-1.5 px-3">
                 Close
               </Button>
@@ -610,8 +716,8 @@ export default function StudentDashboard() {
 
       {/* MODAL: WRITE / EDIT REFLECTION */}
       {showReflectionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-panel-bg border border-neutral-border rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-panel-bg border border-neutral-border rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4 animate-in fade-in duration-150">
             <div className="flex justify-between items-start border-b border-neutral-border pb-3">
               <div>
                 <h3 className="text-h3 text-base text-brand-navy">
@@ -623,14 +729,14 @@ export default function StudentDashboard() {
               </div>
               <button
                 onClick={() => setShowReflectionModal(false)}
-                className="text-text-muted hover:text-brand-navy text-lg leading-none"
+                className="text-text-muted hover:text-brand-navy text-xl leading-none p-1"
               >
                 &times;
               </button>
             </div>
 
             {formError && (
-              <p className="text-xs text-danger-600 bg-danger-50 p-2 rounded">{formError}</p>
+              <p className="text-xs text-danger-600 bg-danger-50 p-2.5 rounded-lg border border-danger-200">{formError}</p>
             )}
 
             <form onSubmit={handleSaveReflection} className="space-y-4 text-xs">
@@ -643,7 +749,7 @@ export default function StudentDashboard() {
                   <select
                     value={reflectionForm.session_id}
                     onChange={(e) => setReflectionForm({ ...reflectionForm, session_id: e.target.value })}
-                    className="w-full border border-neutral-border rounded p-2 text-xs bg-panel-bg"
+                    className="w-full border border-neutral-border rounded-lg p-2.5 text-xs bg-panel-bg focus:ring-2 focus:ring-primary-500/20 focus:border-primary-600"
                   >
                     <option value="">-- General Learning Reflection (No specific session) --</option>
                     {sessionHistory.map((s) => (
@@ -663,13 +769,13 @@ export default function StudentDashboard() {
                 <textarea
                   value={reflectionForm.what_went_well}
                   onChange={(e) => setReflectionForm({ ...reflectionForm, what_went_well: e.target.value })}
-                  placeholder="e.g., I understood the first theorem clearly and stayed focused during the proofs."
+                  placeholder="e.g., I understood the main theorem and maintained steady attention during the proofs."
                   rows={3}
                   maxLength={2000}
-                  className="w-full border border-neutral-border rounded p-2.5 text-xs focus:ring-1 focus:ring-primary-600 focus:outline-none"
+                  className="w-full border border-neutral-border rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-primary-500/20 focus:border-primary-600 focus:outline-none"
                   required
                 />
-                <span className="text-[10px] text-text-muted float-right">
+                <span className="text-[10px] text-text-muted float-right mt-1">
                   {reflectionForm.what_went_well.length}/2000
                 </span>
               </div>
@@ -682,13 +788,13 @@ export default function StudentDashboard() {
                 <textarea
                   value={reflectionForm.what_was_difficult}
                   onChange={(e) => setReflectionForm({ ...reflectionForm, what_was_difficult: e.target.value })}
-                  placeholder="e.g., The derivation on slide 15 felt fast; I got confused about the integration limits."
+                  placeholder="e.g., The transition to multi-variable formulas felt fast; I had questions on the derivation."
                   rows={3}
                   maxLength={2000}
-                  className="w-full border border-neutral-border rounded p-2.5 text-xs focus:ring-1 focus:ring-primary-600 focus:outline-none"
+                  className="w-full border border-neutral-border rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-primary-500/20 focus:border-primary-600 focus:outline-none"
                   required
                 />
-                <span className="text-[10px] text-text-muted float-right">
+                <span className="text-[10px] text-text-muted float-right mt-1">
                   {reflectionForm.what_was_difficult.length}/2000
                 </span>
               </div>
@@ -701,13 +807,13 @@ export default function StudentDashboard() {
                 <textarea
                   value={reflectionForm.improvement_goal}
                   onChange={(e) => setReflectionForm({ ...reflectionForm, improvement_goal: e.target.value })}
-                  placeholder="e.g., Review textbook chapter 4 exercises before Thursday's lecture and write questions down."
+                  placeholder="e.g., Review textbook chapter exercises before next lecture and prepare questions."
                   rows={2}
                   maxLength={2000}
-                  className="w-full border border-neutral-border rounded p-2.5 text-xs focus:ring-1 focus:ring-primary-600 focus:outline-none"
+                  className="w-full border border-neutral-border rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-primary-500/20 focus:border-primary-600 focus:outline-none"
                   required
                 />
-                <span className="text-[10px] text-text-muted float-right">
+                <span className="text-[10px] text-text-muted float-right mt-1">
                   {reflectionForm.improvement_goal.length}/2000
                 </span>
               </div>
@@ -727,7 +833,7 @@ export default function StudentDashboard() {
                   variant="primary"
                   type="submit"
                   disabled={formSaving}
-                  className="text-xs py-1.5 px-4"
+                  className="text-xs py-1.5 px-4 shadow-sm"
                 >
                   {formSaving ? 'Saving...' : editingReflection ? 'Save Changes' : 'Save Reflection'}
                 </Button>

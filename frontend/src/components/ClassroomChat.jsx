@@ -1,6 +1,23 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Button from './Button'
 import { API_BASE_URL } from '../config/api'
+
+function ChatBubbleIcon({ className = 'w-5 h-5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+
+function SendIcon({ className = 'w-3.5 h-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  )
+}
 
 export default function ClassroomChat({
   sessionId,
@@ -26,7 +43,7 @@ export default function ClassroomChat({
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  };
+  }
 
   useEffect(() => {
     scrollToBottom()
@@ -149,31 +166,29 @@ export default function ClassroomChat({
   const isOverLimit = charCount > 500
 
   return (
-    <div className={`card-panel flex flex-col h-[520px] p-0 overflow-hidden border border-neutral-border shadow-sm bg-panel-bg ${className}`}>
+    <div className={`card-panel flex flex-col h-[520px] p-0 overflow-hidden border border-neutral-border shadow-xs bg-panel-bg rounded-xl ${className}`}>
       {/* Chat Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-border bg-neutral-light/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-border bg-slate-50/70">
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-brand-navy/60 flex items-center justify-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary-600"></span>
-          </div>
+          <ChatBubbleIcon className="w-4 h-4 text-brand-navy" />
           <h3 className="text-xs font-bold text-brand-navy uppercase tracking-wider">Classroom Chat</h3>
-          <span className="text-[10px] text-text-muted font-mono bg-neutral-border/40 px-1.5 py-0.5 rounded">
+          <span className="text-[10px] text-text-muted font-mono bg-neutral-200/60 px-1.5 py-0.5 rounded">
             {messages.length} msg{messages.length === 1 ? '' : 's'}
           </span>
         </div>
 
         {/* Live Status Indicator */}
-        <div className="flex items-center gap-1.5 text-[10px] font-mono">
+        <div className="flex items-center gap-1.5 text-[11px] font-mono">
           <span
             className={`w-2 h-2 rounded-full ${
               isWsConnected
-                ? 'bg-success-500'
+                ? 'bg-emerald-500'
                 : connectionState === 'reconnecting'
-                  ? 'bg-warning-500 animate-pulse'
-                  : 'bg-danger-500'
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-rose-500'
             }`}
           />
-          <span className="text-text-muted">
+          <span className="text-text-muted text-xs">
             {isWsConnected
               ? 'Live'
               : connectionState === 'reconnecting'
@@ -184,7 +199,7 @@ export default function ClassroomChat({
       </div>
 
       {/* Messages Stream */}
-      <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-white/70">
+      <div className="flex-1 p-3.5 overflow-y-auto space-y-3 bg-white/70">
         {loadingHistory ? (
           <div className="flex flex-col items-center justify-center h-full text-text-muted space-y-2">
             <div className="w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
@@ -196,21 +211,23 @@ export default function ClassroomChat({
             <p className="text-[10px] text-text-muted">Chat requires active session participation.</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-muted space-y-2 text-center p-4">
-            <div className="w-10 h-10 rounded-full bg-neutral-light border border-neutral-border flex items-center justify-center text-brand-navy font-semibold text-sm">
-              ðŸ’¬
+          <div className="flex flex-col items-center justify-center h-full text-text-muted space-y-2.5 text-center p-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-primary-600 shadow-xs">
+              <ChatBubbleIcon className="w-6 h-6 text-primary-600" />
             </div>
-            <p className="text-xs font-medium text-brand-navy">No messages yet</p>
-            <p className="text-[11px] text-text-muted max-w-[200px]">
-              Ask a question or share thoughts with your instructor and peers.
-            </p>
+            <div>
+              <p className="text-xs font-semibold text-brand-navy">No messages yet</p>
+              <p className="text-[11px] text-text-muted max-w-[220px] mt-0.5 leading-relaxed">
+                Ask a question or share thoughts with your instructor and peers.
+              </p>
+            </div>
           </div>
         ) : (
           messages.map((msg) => {
             if (msg.is_system) {
               return (
                 <div key={msg.id} className="flex justify-center my-2">
-                  <span className="text-[10px] font-sans italic text-text-muted bg-neutral-light border border-neutral-border/60 px-2.5 py-1 rounded-full">
+                  <span className="text-[10px] font-sans italic text-text-muted bg-neutral-light border border-neutral-border/60 px-3 py-1 rounded-full">
                     {msg.content}
                   </span>
                 </div>
@@ -226,12 +243,12 @@ export default function ClassroomChat({
                 className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
               >
                 {/* Sender metadata */}
-                <div className="flex items-center gap-1.5 mb-0.5 px-1">
-                  <span className="text-[10.5px] font-semibold text-brand-navy">
+                <div className="flex items-center gap-1.5 mb-1 px-1">
+                  <span className="text-[11px] font-semibold text-brand-navy">
                     {msg.sender_name} {isMine && <span className="text-primary-600 font-normal">(You)</span>}
                   </span>
                   <span
-                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
                       isTeacher
                         ? 'bg-brand-navy text-white border-brand-navy'
                         : 'bg-primary-50 text-primary-700 border-primary-200'
@@ -246,12 +263,12 @@ export default function ClassroomChat({
 
                 {/* Message bubble */}
                 <div
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed break-words shadow-xs border ${
+                  className={`max-w-[85%] rounded-xl px-3.5 py-2 text-xs leading-relaxed break-words shadow-xs border ${
                     isMine
                       ? 'bg-primary-600 text-white border-primary-700 rounded-tr-none'
                       : isTeacher
                         ? 'bg-brand-navy/5 text-brand-navy border-brand-navy/20 rounded-tl-none font-medium'
-                        : 'bg-neutral-light text-text-navy border-neutral-border rounded-tl-none'
+                        : 'bg-neutral-light text-slate-800 border-neutral-border rounded-tl-none'
                   }`}
                 >
                   {msg.content}
@@ -264,13 +281,13 @@ export default function ClassroomChat({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-neutral-border bg-neutral-light/40 p-2.5">
+      <div className="border-t border-neutral-border bg-slate-50/50 p-3">
         {sendError && (
-          <div className="text-[10.5px] text-danger-600 mb-1.5 px-1 font-medium flex items-center justify-between">
+          <div className="text-[11px] text-danger-600 mb-2 px-1 font-medium flex items-center justify-between">
             <span>{sendError}</span>
             <button
               onClick={() => setSendError('')}
-              className="text-text-muted hover:text-danger-700 text-xs font-bold"
+              className="text-text-muted hover:text-danger-700 text-xs font-bold ml-2"
             >
               &times;
             </button>
@@ -287,7 +304,7 @@ export default function ClassroomChat({
               onKeyDown={handleKeyDown}
               placeholder={isWsConnected ? "Type a message... (Press Enter to send)" : "Chat is offline..."}
               disabled={!isWsConnected}
-              className={`input-text flex-1 resize-none text-xs p-2 rounded border transition-colors ${
+              className={`input-text flex-1 resize-none text-xs p-2.5 rounded-lg border transition-colors ${
                 isOverLimit ? 'border-danger-500 focus:ring-danger-500' : 'border-neutral-border'
               }`}
             />
@@ -295,9 +312,10 @@ export default function ClassroomChat({
               type="submit"
               variant="primary"
               disabled={!isWsConnected || !inputText.trim() || isOverLimit}
-              className="text-xs py-2 px-3 self-stretch flex items-center justify-center shrink-0"
+              className="text-xs py-2 px-3.5 self-stretch flex items-center justify-center gap-1.5 shrink-0"
             >
-              Send
+              <SendIcon className="w-3.5 h-3.5" />
+              <span>Send</span>
             </Button>
           </div>
 

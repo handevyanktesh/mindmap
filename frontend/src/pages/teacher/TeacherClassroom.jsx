@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageContainer from '../../components/PageContainer'
 import Button from '../../components/Button'
@@ -13,6 +13,9 @@ import { useClassroomVoice } from '../../hooks/useClassroomVoice'
 import { useScreenShare } from '../../hooks/useScreenShare'
 import ClassroomVoiceControls from '../../components/ClassroomVoiceControls'
 import ScreenShareViewer from '../../components/ScreenShareViewer'
+import DistributionBarChart from '../../components/analytics/DistributionBarChart'
+import ConfusionDistributionChart from '../../components/analytics/ConfusionDistributionChart'
+import TimelineTrendChart from '../../components/analytics/TimelineTrendChart'
 
 export default function TeacherClassroom() {
   const { id } = useParams()
@@ -27,6 +30,7 @@ export default function TeacherClassroom() {
   const [sessionError, setSessionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [concludedSession, setConcludedSession] = useState(null)
+  const [timelinePoints, setTimelinePoints] = useState([])
 
   // In-memory session telemetry accumulation
   const telemetryTimelineRef = useRef([])
@@ -376,13 +380,16 @@ export default function TeacherClassroom() {
           const normalCnt = reporting.filter((r) => r.engagement_state === 'NORMAL_BEHAVIOUR').length
           const reducedCnt = reporting.filter((r) => r.engagement_state === 'REDUCED_ENGAGEMENT_LIKE').length
           const confusionCnt = reporting.filter((r) => r.confusion_signal === 'ELEVATED').length
-          telemetryTimelineRef.current.push({
+          const newPoint = {
             timestamp_ms: currentNow,
+            time_label: new Date(currentNow).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             normal_pct: Math.round((normalCnt / reporting.length) * 1000) / 10,
             reduced_pct: Math.round((reducedCnt / reporting.length) * 1000) / 10,
             elevated_confusion_pct: Math.round((confusionCnt / reporting.length) * 1000) / 10,
             reporting_count: reporting.length
-          })
+          }
+          telemetryTimelineRef.current.push(newPoint)
+          setTimelinePoints((prev) => [...prev, newPoint])
         }
       }
     }, 3000)
@@ -452,7 +459,7 @@ export default function TeacherClassroom() {
           )}
           <div>
             <h2 className="font-bold text-brand-navy text-base">
-              {currentSession ? `${courseTitle} â€” ${currentSession.title}` : courseTitle}
+              {currentSession ? `${courseTitle} \u2014 ${currentSession.title}` : courseTitle}
             </h2>
             <div className="text-[10px] text-text-muted mt-0.5 space-x-2">
               <span>Live Code: <code className="bg-neutral-light border px-1 rounded font-semibold uppercase">{classroom?.join_code}</code></span>
@@ -681,85 +688,146 @@ export default function TeacherClassroom() {
         </div>
       )}
 
-      {/* Real-time Classroom Aggregates Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="card-panel text-center py-3">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Reporting Students</span>
-          <div className="text-2xl font-extrabold text-brand-navy mt-1">
-            {aggregation.reportingCount}
-            <span className="text-xs font-normal text-text-muted ml-1">/ {participants.filter((p) => p.status === 'joined').length}</span>
-          </div>
-          <span className="text-[9px] text-text-muted block mt-0.5">Active Telemetry</span>
-        </div>
-
-        <div className="card-panel text-center py-3">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Normal Behaviour</span>
-          <div className="text-2xl font-extrabold text-emerald-600 mt-1">
-            {aggregation.normalPercentage !== null ? `${Math.round(aggregation.normalPercentage)}%` : 'â€”'}
-          </div>
-          <span className="text-[9px] text-text-muted block mt-0.5">
-            {aggregation.counts.normal} student{aggregation.counts.normal === 1 ? '' : 's'}
+      {/* Real-time Classroom Aggregates Summary Cards */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xs font-bold text-brand-navy uppercase tracking-wider">
+            Live Classroom Engagement & Confusion Metrics
+          </h3>
+          <span className="text-[11px] text-text-muted font-mono">
+            {aggregation.reportingCount} of {participants.filter((p) => p.status === 'joined').length} Actively Streaming
           </span>
         </div>
 
-        <div className="card-panel text-center py-3">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Reduced Engagement</span>
-          <div className="text-2xl font-extrabold text-amber-600 mt-1">
-            {aggregation.reducedPercentage !== null ? `${Math.round(aggregation.reducedPercentage)}%` : 'â€”'}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+          <div className="card-panel text-center p-3.5 bg-panel-bg rounded-xl border border-neutral-border shadow-xs">
+            <span className="text-[10px] uppercase font-mono font-bold text-text-muted">Actively Reporting</span>
+            <div className="text-2xl font-extrabold text-brand-navy mt-1">
+              {aggregation.reportingCount}
+              <span className="text-xs font-normal text-text-muted ml-1">/ {participants.filter((p) => p.status === 'joined').length}</span>
+            </div>
+            <span className="text-[9px] text-text-muted block mt-0.5">Live Local Telemetry</span>
           </div>
-          <span className="text-[9px] text-text-muted block mt-0.5">
-            {aggregation.counts.reduced} student{aggregation.counts.reduced === 1 ? '' : 's'}
-          </span>
-        </div>
 
-        <div className="card-panel text-center py-3">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Elevated Confusion</span>
-          <div className="text-2xl font-extrabold text-warning-600 mt-1">
-            {aggregation.elevatedConfusionPercentage !== null ? `${Math.round(aggregation.elevatedConfusionPercentage)}%` : 'â€”'}
+          <div className="card-panel text-center p-3.5 bg-panel-bg rounded-xl border border-neutral-border shadow-xs">
+            <span className="text-[10px] uppercase font-mono font-bold text-text-muted">Normal Attention</span>
+            <div className="text-2xl font-extrabold text-emerald-600 mt-1">
+              {aggregation.normalPercentage !== null ? `${Math.round(aggregation.normalPercentage)}%` : '--'}
+            </div>
+            <span className="text-[9px] text-text-muted block mt-0.5">
+              {aggregation.counts.normal} student{aggregation.counts.normal === 1 ? '' : 's'} steady
+            </span>
           </div>
-          <span className="text-[9px] text-text-muted block mt-0.5">
-            {aggregation.counts.elevatedConfusion} student{aggregation.counts.elevatedConfusion === 1 ? '' : 's'}
-          </span>
-        </div>
 
-        <div className="card-panel text-center py-3 col-span-2 sm:col-span-1">
-          <span className="text-[10px] uppercase font-mono text-text-muted">Mean Confidence</span>
-          <div className="text-2xl font-extrabold text-primary-600 mt-1">
-            {aggregation.meanConfidence !== null ? aggregation.meanConfidence.toFixed(2) : 'â€”'}
+          <div className="card-panel text-center p-3.5 bg-panel-bg rounded-xl border border-neutral-border shadow-xs">
+            <span className="text-[10px] uppercase font-mono font-bold text-text-muted">Reduced Attention</span>
+            <div className="text-2xl font-extrabold text-amber-600 mt-1">
+              {aggregation.reducedPercentage !== null ? `${Math.round(aggregation.reducedPercentage)}%` : '--'}
+            </div>
+            <span className="text-[9px] text-text-muted block mt-0.5">
+              {aggregation.counts.reduced} student{aggregation.counts.reduced === 1 ? '' : 's'} shifted
+            </span>
           </div>
-          <span className="text-[9px] text-text-muted block mt-0.5">Evidence Quality</span>
+
+          <div className="card-panel text-center p-3.5 bg-panel-bg rounded-xl border border-neutral-border shadow-xs">
+            <span className="text-[10px] uppercase font-mono font-bold text-text-muted">Elevated Confusion</span>
+            <div className="text-2xl font-extrabold text-rose-600 mt-1">
+              {aggregation.elevatedConfusionPercentage !== null ? `${Math.round(aggregation.elevatedConfusionPercentage)}%` : '--'}
+            </div>
+            <span className="text-[9px] text-text-muted block mt-0.5">
+              {aggregation.counts.elevatedConfusion} student{aggregation.counts.elevatedConfusion === 1 ? '' : 's'} questions
+            </span>
+          </div>
+
+          <div className="card-panel text-center p-3.5 bg-panel-bg rounded-xl border border-neutral-border shadow-xs col-span-2 sm:col-span-1">
+            <span className="text-[10px] uppercase font-mono font-bold text-text-muted">Evidence Quality</span>
+            <div className="text-2xl font-extrabold text-primary-600 mt-1">
+              {aggregation.meanConfidence !== null ? aggregation.meanConfidence.toFixed(2) : '--'}
+            </div>
+            <span className="text-[9px] text-text-muted block mt-0.5">Mean Signal Support</span>
+          </div>
         </div>
       </div>
 
+      {/* Live Classroom Analytics Charts */}
+      {activeSession && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DistributionBarChart
+              normalPct={aggregation.normalPercentage}
+              reducedPct={aggregation.reducedPercentage}
+              uncertainPct={
+                aggregation.reportingCount > 0
+                  ? Math.round((aggregation.counts.uncertainEngagement / aggregation.reportingCount) * 100)
+                  : null
+              }
+              normalCount={aggregation.counts.normal}
+              reducedCount={aggregation.counts.reduced}
+              uncertainCount={aggregation.counts.uncertainEngagement}
+              totalCount={aggregation.reportingCount}
+              title="Classroom Attention Distribution"
+              subtitle="Proportion of students exhibiting steady vs reduced engagement relative to baseline"
+            />
+
+            <ConfusionDistributionChart
+              lowPct={
+                aggregation.reportingCount > 0
+                  ? Math.round((aggregation.counts.lowConfusion / aggregation.reportingCount) * 100)
+                  : null
+              }
+              elevatedPct={aggregation.elevatedConfusionPercentage}
+              uncertainPct={
+                aggregation.reportingCount > 0
+                  ? Math.round((aggregation.counts.uncertainConfusion / aggregation.reportingCount) * 100)
+                  : null
+              }
+              lowCount={aggregation.counts.lowConfusion}
+              elevatedCount={aggregation.counts.elevatedConfusion}
+              uncertainCount={aggregation.counts.uncertainConfusion}
+              totalCount={aggregation.reportingCount}
+              title="Classroom Confusion Signal Distribution"
+              subtitle="Proportion of students exhibiting low vs elevated confusion cues"
+            />
+          </div>
+
+          {/* Continuous Trajectory Timeline Chart */}
+          <TimelineTrendChart
+            timeline={timelinePoints}
+            title="Live Lecture Attention & Confusion Trajectory"
+            subtitle="Continuous 3-second trajectory of classroom normal attention and elevated confusion"
+          />
+        </div>
+      )}
+
       {/* Real-time Session Participants Roster */}
-      <div className="card-panel space-y-4">
+      <div className="card-panel space-y-4 bg-panel-bg rounded-xl border border-neutral-border shadow-xs p-5">
         <div className="flex justify-between items-center border-b border-neutral-border pb-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-h3 text-sm font-semibold text-brand-navy">Live Participant Behaviour Roster</h3>
-            <span className="text-xs bg-primary-50 text-primary-600 font-bold px-2 py-0.5 rounded-full border border-primary-100">
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-sm font-bold text-brand-navy">Live Participant Status Roster</h3>
+            <span className="text-xs bg-primary-50 text-primary-700 font-bold px-2.5 py-0.5 rounded-full border border-primary-200">
               {participants.filter((p) => p.status === 'joined').length} Enrolled
             </span>
           </div>
-          <span className="text-[10px] text-text-muted">
+          <span className="text-[11px] text-text-muted font-mono">
             {aggregation.reportingCount} of {participants.filter((p) => p.status === 'joined').length} reporting live telemetry
           </span>
         </div>
 
         {participants.length === 0 ? (
-          <p className="text-xs text-text-muted py-6 text-center">
+          <p className="text-xs text-text-muted py-8 text-center">
             No students have joined this session yet. Share the classroom code for students to enter when active.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-neutral-light border-b border-neutral-border text-[11px] font-semibold text-brand-navy">
-                  <th className="p-3">Student</th>
-                  <th className="p-3">Session Status</th>
-                  <th className="p-3">Engagement Assessment</th>
-                  <th className="p-3">Confusion Signal</th>
-                  <th className="p-3">Confidence</th>
-                  <th className="p-3 text-right">Telemetry Status</th>
+                <tr className="bg-slate-50 border-b border-neutral-border text-[11px] font-semibold text-brand-navy">
+                  <th className="p-3.5">Student</th>
+                  <th className="p-3.5">Session Status</th>
+                  <th className="p-3.5">Attention-Related Signal</th>
+                  <th className="p-3.5">Confusion-Related Signal</th>
+                  <th className="p-3.5">Evidence Quality</th>
+                  <th className="p-3.5 text-right">Telemetry Link</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-border">
@@ -769,10 +837,10 @@ export default function TeacherClassroom() {
                   const isParticipantActive = p.status === 'joined'
 
                   return (
-                    <tr key={p.id} className="hover:bg-neutral-light/40 transition-colors">
-                      <td className="p-3">
+                    <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="p-3.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-neutral-light border border-neutral-border flex items-center justify-center font-bold text-[11px] text-brand-navy shrink-0">
+                          <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[11px] text-brand-navy shrink-0">
                             {p.student_name ? p.student_name.split(' ').map((n) => n[0]).join('') : 'S'}
                           </div>
                           <div>
@@ -782,71 +850,83 @@ export default function TeacherClassroom() {
                         </div>
                       </td>
 
-                      <td className="p-3">
+                      <td className="p-3.5">
                         {p.status === 'joined' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Joined
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
-                            <span className="w-1.5 h-1.5 rounded-full bg-neutral-border" /> Left
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Left
                           </span>
                         )}
                       </td>
 
-                      <td className="p-3">
+                      <td className="p-3.5">
                         {isParticipantActive && reporting && telemetry ? (
                           <>
                             {telemetry.engagement_state === 'NORMAL_BEHAVIOUR' && (
-                              <span className="text-emerald-700 font-medium text-[11px]">Normal behaviour</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Normal Attention
+                              </span>
                             )}
                             {telemetry.engagement_state === 'REDUCED_ENGAGEMENT_LIKE' && (
-                              <span className="text-amber-700 font-medium text-[11px]">Reduced-engagement-like</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" /> Reduced Attention
+                              </span>
                             )}
                             {telemetry.engagement_state === 'UNCERTAIN' && (
-                              <span className="text-neutral-500 text-[11px]">Uncertain</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                Limited Evidence
+                              </span>
                             )}
                           </>
                         ) : (
-                          <span className="text-text-muted text-[11px]">â€”</span>
+                          <span className="text-text-muted text-[11px]">--</span>
                         )}
                       </td>
 
-                      <td className="p-3">
+                      <td className="p-3.5">
                         {isParticipantActive && reporting && telemetry ? (
                           <>
                             {telemetry.confusion_signal === 'LOW' && (
-                              <span className="text-brand-navy text-[11px]">Low</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                Low Confusion
+                              </span>
                             )}
                             {telemetry.confusion_signal === 'ELEVATED' && (
-                              <span className="text-amber-700 font-medium text-[11px]">Elevated</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-800 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                                <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" /> Elevated Confusion
+                              </span>
                             )}
                             {telemetry.confusion_signal === 'UNCERTAIN' && (
-                              <span className="text-neutral-500 text-[11px]">Uncertain</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                Limited Evidence
+                              </span>
                             )}
                           </>
                         ) : (
-                          <span className="text-text-muted text-[11px]">â€”</span>
+                          <span className="text-text-muted text-[11px]">--</span>
                         )}
                       </td>
 
-                      <td className="p-3 font-mono text-[11px]">
+                      <td className="p-3.5 font-mono text-[11px]">
                         {isParticipantActive && reporting && typeof telemetry?.confidence === 'number' ? (
-                          <span className="text-text-muted">{telemetry.confidence.toFixed(2)}</span>
+                          <span className="text-brand-navy font-semibold">{telemetry.confidence.toFixed(2)}</span>
                         ) : (
-                          <span className="text-text-muted">â€”</span>
+                          <span className="text-text-muted">--</span>
                         )}
                       </td>
 
-                      <td className="p-3 text-right">
+                      <td className="p-3.5 text-right">
                         {isParticipantActive ? (
                           reporting ? (
-                            <StatusBadge status="success" label="Reporting" />
+                            <StatusBadge status="success" label="Streaming" dot={true} />
                           ) : (
-                            <StatusBadge status="info" label="Inactive" />
+                            <StatusBadge status="neutral" label="Standby" />
                           )
                         ) : (
-                          <StatusBadge status="info" label="Left" />
+                          <StatusBadge status="neutral" label="Left" />
                         )}
                       </td>
                     </tr>
@@ -856,6 +936,10 @@ export default function TeacherClassroom() {
             </table>
           </div>
         )}
+
+        <div className="pt-2 border-t border-neutral-border text-[10px] text-text-muted leading-relaxed">
+          * Pedagogical Notice: Behavioural indicators are real-time guidance markers calculated locally on student devices. They are designed for instructor awareness and pacing, not diagnostic or grade assessment.
+        </div>
       </div>
 
       {/* Live Classroom Chat */}
