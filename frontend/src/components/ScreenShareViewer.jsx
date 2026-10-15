@@ -43,11 +43,16 @@ export default function ScreenShareViewer({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const containerRef = useRef(null)
 
+  const hasActiveStream = Boolean(stream && (isSharing || isTeacherSharing))
+
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream
+      videoRef.current.play?.().catch((err) => {
+        console.warn('Screen share video playback warning:', err)
+      })
     }
-  }, [stream])
+  }, [stream, hasActiveStream])
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return
@@ -57,8 +62,6 @@ export default function ScreenShareViewer({
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {})
     }
   }
-
-  const hasActiveStream = Boolean(stream && (isSharing || isTeacherSharing))
 
   return (
     <div
@@ -123,7 +126,7 @@ export default function ScreenShareViewer({
           ref={videoRef}
           autoPlay
           playsInline
-          muted={isSharing} // Mute local preview to prevent feedback
+          muted={true} // Screen share has no audio; muted ensures unblocked autoplay across all browsers
           className="w-full h-full object-contain bg-black"
         />
       ) : (

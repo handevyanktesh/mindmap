@@ -27,7 +27,7 @@ export function isStudentReporting(record, nowMs = Date.now()) {
     : record.lastUpdated
   if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return false
   const elapsed = nowMs - timestamp
-  return elapsed >= -5000 && elapsed <= STALE_TELEMETRY_MS
+  return elapsed >= -60000 && elapsed <= STALE_TELEMETRY_MS
 }
 
 /**

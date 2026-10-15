@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { getIceServers } from '../features/webrtc/webrtcConfig'
 
 /**
@@ -125,11 +125,17 @@ export function useScreenShare({
       pc.addTrack(track, screenStreamRef.current)
     })
 
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        peerConnectionsRef.current.delete(studentId)
+      }
+    }
+
     pc.onicecandidate = (event) => {
       if (event.candidate && sendSignal) {
         sendSignal(studentId, {
           type: 'candidate',
-          candidate: event.candidate,
+          candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
           media: 'screen'
         })
       }
@@ -165,8 +171,9 @@ export function useScreenShare({
     peerConnectionsRef.current.set(teacherId, pc)
 
     pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        setScreenStream(event.streams[0])
+      const stream = (event.streams && event.streams[0]) || (event.track ? new MediaStream([event.track]) : null)
+      if (stream) {
+        setScreenStream(stream)
         setIsTeacherSharing(true)
       }
     }
@@ -175,6 +182,7 @@ export function useScreenShare({
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         setScreenStream(null)
         setIsTeacherSharing(false)
+        peerConnectionsRef.current.delete(teacherId)
       }
     }
 
@@ -182,7 +190,7 @@ export function useScreenShare({
       if (event.candidate && sendSignal) {
         sendSignal(teacherId, {
           type: 'candidate',
-          candidate: event.candidate,
+          candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
           media: 'screen'
         })
       }
@@ -217,11 +225,17 @@ export function useScreenShare({
 
     const { type, data, sender_id, signal } = lastMessage
 
-    // 1. Teacher started screen share -> Student prepares
+    // 1. Teacher started screen share -> Student prepares and signals ready to view
     if (type === 'screenshare_started' && data) {
       if (!isTeacher) {
         setIsTeacherSharing(true)
         setTeacherSharingName(data.teacher_name || 'Teacher')
+        if (data.teacher_id && sendSignal) {
+          sendSignal(data.teacher_id, {
+            type: 'viewer_ready',
+            media: 'screen'
+          })
+        }
       }
     }
 
@@ -237,6 +251,7 @@ export function useScreenShare({
           } catch {}
         })
         peerConnectionsRef.current.clear()
+        pendingCandidatesRef.current.clear()
       }
     }
 
@@ -274,12 +289,19 @@ export function useScreenShare({
       setIsTeacherSharing(false)
       setScreenStream(null)
     }
-  }, [lastMessage, isTeacher, stopScreenShare, handleRemoteOffer])
+  }, [lastMessage, isTeacher, stopScreenShare, handleRemoteOffer, sendSignal])
 
   // If teacher is sharing and a student signals presence or requests connection
   useEffect(() => {
-    if (isTeacher && isSharing && lastMessage?.type === 'webrtc_signal' && lastMessage.signal?.type === 'viewer_ready') {
-      connectWithViewer(lastMessage.sender_id)
+    if (isTeacher && isSharing) {
+      if (lastMessage?.type === 'webrtc_signal' && lastMessage.signal?.type === 'viewer_ready') {
+        connectWithViewer(lastMessage.sender_id)
+      } else if (lastMessage?.type === 'student_behaviour_telemetry' && lastMessage.data?.user_id) {
+        const studentId = lastMessage.data.user_id
+        if (!peerConnectionsRef.current.has(studentId)) {
+          connectWithViewer(studentId)
+        }
+      }
     }
   }, [isTeacher, isSharing, lastMessage, connectWithViewer])
 

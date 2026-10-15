@@ -299,6 +299,8 @@ export default function TeacherClassroom() {
       const data = lastMessage.data
       const studentId = data.user_id
       if (studentId) {
+        const localReceiptMs = Date.now()
+        setNowMs(localReceiptMs)
         setLiveTelemetry((prev) => ({
           ...prev,
           [studentId]: {
@@ -307,7 +309,8 @@ export default function TeacherClassroom() {
             engagement_state: data.engagement_state,
             confusion_signal: data.confusion_signal,
             confidence: data.confidence,
-            received_at_ms: data.received_at_ms
+            received_at_ms: localReceiptMs,
+            server_received_at_ms: data.received_at_ms
           }
         }))
 
@@ -351,7 +354,7 @@ export default function TeacherClassroom() {
               student_id: studentId,
               student_name: data.student_name || 'Student',
               student_email: '', // Not exposed over telemetry to protect privacy
-              joined_at: new Date(data.received_at_ms || Date.now()).toISOString(),
+              joined_at: new Date(localReceiptMs).toISOString(),
               left_at: null,
               status: 'joined'
             }
@@ -368,14 +371,27 @@ export default function TeacherClassroom() {
     }
   }, [activeSession])
 
+  // Keep stable refs for ticker to prevent premature timer resets
+  const liveTelemetryRef = useRef(liveTelemetry)
+  useEffect(() => {
+    liveTelemetryRef.current = liveTelemetry
+  }, [liveTelemetry])
+
+  const activeSessionRef = useRef(activeSession)
+  useEffect(() => {
+    activeSessionRef.current = activeSession
+  }, [activeSession])
+
   // Periodic ticker to re-evaluate student staleness (>10s) and capture timeline trajectory
   useEffect(() => {
     const timer = setInterval(() => {
       const currentNow = Date.now()
       setNowMs(currentNow)
 
-      if (activeSession && activeSession.status === 'active') {
-        const reporting = Object.values(liveTelemetry).filter((r) => currentNow - r.received_at_ms <= 10000)
+      const currSession = activeSessionRef.current
+      if (currSession && currSession.status === 'active') {
+        const telemetryMap = liveTelemetryRef.current
+        const reporting = Object.values(telemetryMap).filter((r) => isStudentReporting(r, currentNow))
         if (reporting.length > 0) {
           const normalCnt = reporting.filter((r) => r.engagement_state === 'NORMAL_BEHAVIOUR').length
           const reducedCnt = reporting.filter((r) => r.engagement_state === 'REDUCED_ENGAGEMENT_LIKE').length
@@ -394,7 +410,7 @@ export default function TeacherClassroom() {
       }
     }, 3000)
     return () => clearInterval(timer)
-  }, [activeSession, liveTelemetry])
+  }, [])
 
   // Calculate live classroom aggregation
   const aggregation = calculateClassroomAggregation(liveTelemetry, nowMs)
